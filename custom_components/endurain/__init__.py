@@ -36,7 +36,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         mfa_code=entry.data.get(CONF_MFA_CODE),
     )
     coordinator = EndurainCoordinator(hass, entry, client)
-    await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
@@ -46,6 +45,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_update_listener))
     await async_register_services(hass)
+    entry.async_create_background_task(
+        hass,
+        coordinator.async_refresh(),
+        "endurain_initial_refresh",
+    )
     return True
 
 
