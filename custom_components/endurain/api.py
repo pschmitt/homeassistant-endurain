@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from datetime import date, timedelta
 import json
@@ -36,6 +37,7 @@ class EndurainApiClient:
         self._password = password
         self._mfa_code = mfa_code
         self._access_token: str | None = None
+        self._auth_lock = asyncio.Lock()
 
     @property
     def base_url(self) -> str:
@@ -70,40 +72,44 @@ class EndurainApiClient:
 
     async def async_login(self, *, mfa_code: str | None = None) -> str:
         """Authenticate against Endurain."""
-        payload = {"username": self._username, "password": self._password}
-        response = await self._raw_request(
-            "post",
-            "/api/v1/auth/login",
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "X-Client-Type": "mobile",
-            },
-            data=payload,
-            auth=False,
-            retry_on_auth=False,
-        )
-        body = await self._decode_response(response)
+        async with self._auth_lock:
+            if self._access_token is not None:
+                return self._access_token
 
-        if response.status == 429:
-            raise EndurainRateLimitError(
-                self._extract_error_message(body, "Rate limit exceeded"),
-                retry_after=self._extract_retry_after(body),
+            payload = {"username": self._username, "password": self._password}
+            response = await self._raw_request(
+                "post",
+                "/api/v1/auth/login",
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-Client-Type": "mobile",
+                },
+                data=payload,
+                auth=False,
+                retry_on_auth=False,
             )
+            body = await self._decode_response(response)
 
-        if response.status < 200 or response.status >= 300:
-            raise EndurainAuthError(self._extract_error_message(body, "Login failed"))
+            if response.status == 429:
+                raise EndurainRateLimitError(
+                    self._extract_error_message(body, "Rate limit exceeded"),
+                    retry_after=self._extract_retry_after(body),
+                )
 
-        if isinstance(body, Mapping) and body.get("mfa_required"):
-            code = mfa_code or self._mfa_code
-            if not code:
-                raise EndurainMfaRequiredError("MFA is required")
-            body = await self.async_verify_mfa(code)
+            if response.status < 200 or response.status >= 300:
+                raise EndurainAuthError(self._extract_error_message(body, "Login failed"))
 
-        if not isinstance(body, Mapping) or not body.get("access_token"):
-            raise EndurainAuthError("Login response missing access token")
+            if isinstance(body, Mapping) and body.get("mfa_required"):
+                code = mfa_code or self._mfa_code
+                if not code:
+                    raise EndurainMfaRequiredError("MFA is required")
+                body = await self.async_verify_mfa(code)
 
-        self._access_token = str(body["access_token"])
-        return self._access_token
+            if not isinstance(body, Mapping) or not body.get("access_token"):
+                raise EndurainAuthError("Login response missing access token")
+
+            self._access_token = str(body["access_token"])
+            return self._access_token
 
     async def async_verify_mfa(self, code: str) -> dict[str, Any]:
         """Complete MFA verification."""
