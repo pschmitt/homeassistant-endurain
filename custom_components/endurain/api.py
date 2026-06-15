@@ -38,6 +38,7 @@ class EndurainApiClient:
         self._mfa_code = mfa_code
         self._access_token: str | None = None
         self._auth_lock = asyncio.Lock()
+        self._login_retry_at: float = 0.0
 
     @property
     def base_url(self) -> str:
@@ -76,6 +77,11 @@ class EndurainApiClient:
             if self._access_token is not None:
                 return self._access_token
 
+            loop = asyncio.get_running_loop()
+            delay = self._login_retry_at - loop.time()
+            if delay > 0:
+                await asyncio.sleep(delay)
+
             payload = {"username": self._username, "password": self._password}
             response = await self._raw_request(
                 "post",
@@ -91,9 +97,11 @@ class EndurainApiClient:
             body = await self._decode_response(response)
 
             if response.status == 429:
+                retry_after = self._extract_retry_after(body) or 60
+                self._login_retry_at = loop.time() + retry_after
                 raise EndurainRateLimitError(
                     self._extract_error_message(body, "Rate limit exceeded"),
-                    retry_after=self._extract_retry_after(body),
+                    retry_after=retry_after,
                 )
 
             if response.status < 200 or response.status >= 300:
@@ -108,6 +116,7 @@ class EndurainApiClient:
             if not isinstance(body, Mapping) or not body.get("access_token"):
                 raise EndurainAuthError("Login response missing access token")
 
+            self._login_retry_at = 0.0
             self._access_token = str(body["access_token"])
             return self._access_token
 
