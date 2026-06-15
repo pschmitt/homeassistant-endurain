@@ -44,6 +44,13 @@ class EndurainLatestWorkoutMapCamera(EndurainEntity, Camera):
         super().__init__(coordinator, entry)
         Camera.__init__(self)
         self._attr_unique_id = f"{entry.entry_id}_latest_workout_map"
+        self.content_type = "image/jpeg"
+
+    async def async_added_to_hass(self) -> None:
+        """Log when the entity is added to Home Assistant."""
+        await EndurainEntity.async_added_to_hass(self)
+        await Camera.async_added_to_hass(self)
+        self.async_write_ha_state()
 
     @property
     def available(self) -> bool:
@@ -86,11 +93,6 @@ class EndurainLatestWorkoutMapCamera(EndurainEntity, Camera):
             width=width or 800,
             height=height or 600,
         )
-
-    @property
-    def content_type(self) -> str:
-        """Return the camera content type."""
-        return "image/jpeg"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
