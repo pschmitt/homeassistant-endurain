@@ -6,7 +6,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "endurain"
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON, Platform.EVENT]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON, Platform.EVENT, Platform.CAMERA]
 
 CONF_MFA_CODE = "mfa_code"
 CONF_ENABLE_GEARS = "enable_gears"

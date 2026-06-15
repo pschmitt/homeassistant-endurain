@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -30,6 +29,14 @@ from .const import (
 )
 from .coordinator import EndurainCoordinator
 from .entity import EndurainEntity
+from .activity import (
+    activity_distance_km,
+    activity_extra_attributes,
+    activity_name,
+    activity_primary_timestamp,
+    activity_type_name,
+    extract_route_points,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -87,6 +94,7 @@ async def async_setup_entry(
     ]
     static_entities.extend(
         [
+            EndurainLatestWorkoutSensor(coordinator, entry),
             EndurainNotificationsSensor(coordinator, entry),
             EndurainStepsSensor(coordinator, entry),
             EndurainSleepSensor(coordinator, entry),
@@ -196,6 +204,64 @@ class EndurainSummarySensor(EndurainEntity, SensorEntity):
         summaries = data.get("summaries", {})
         summary = summaries.get(self.entity_description.key)
         return summary if isinstance(summary, dict) else None
+
+
+class EndurainLatestWorkoutSensor(EndurainEntity, SensorEntity):
+    """Latest Endurain workout sensor."""
+
+    _attr_icon = "mdi:run-fast"
+    _attr_name = "Latest Workout"
+
+    def __init__(self, coordinator: EndurainCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the latest workout sensor."""
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_latest_workout"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the latest workout name."""
+        activity = self._activity
+        if activity is None:
+            return None
+        return activity_name(activity) or activity_type_name(activity) or str(activity.get("id"))
+
+    @property
+    def available(self) -> bool:
+        """Return whether the entity is available."""
+        return super().available and self._activity is not None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the latest workout metadata."""
+        activity = self._activity
+        if activity is None:
+            return {}
+        attrs = activity_extra_attributes(activity)
+        route_points = extract_route_points(self._streams)
+        attrs["has_map"] = len(route_points) >= 2
+        attrs["route_point_count"] = len(route_points)
+        attrs["map_hidden"] = bool(activity.get("hide_map"))
+        attrs["friendly_activity_name"] = activity_name(activity)
+        attrs["friendly_activity_type"] = activity_type_name(activity)
+        attrs["started_at"] = activity_primary_timestamp(activity)
+        attrs["distance_km"] = activity_distance_km(activity)
+        return attrs
+
+    @property
+    def _activity(self) -> dict[str, Any] | None:
+        """Return the latest activity payload."""
+        if not self.coordinator.data:
+            return None
+        activity = self.coordinator.data.get("latest_activity")
+        return activity if isinstance(activity, dict) else None
+
+    @property
+    def _streams(self) -> list[dict[str, Any]]:
+        """Return the latest activity streams."""
+        if not self.coordinator.data:
+            return []
+        streams = self.coordinator.data.get("latest_activity_streams")
+        return streams if isinstance(streams, list) else []
 
 
 class EndurainNotificationsSensor(EndurainEntity, SensorEntity):

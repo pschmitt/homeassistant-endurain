@@ -87,9 +87,21 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 for index, key in enumerate(summary_coros.keys(), start=3)
             }
             latest_activity = None
+            latest_activity_streams: list[dict[str, Any]] = []
             user_id = profile.get("id")
             if isinstance(user_id, int):
                 latest_activity = await self.client.async_fetch_latest_activity(user_id)
+                activity_id = latest_activity.get("id") if isinstance(latest_activity, dict) else None
+                if isinstance(activity_id, int):
+                    try:
+                        latest_activity_streams = await self.client.async_fetch_activity_streams(
+                            activity_id
+                        )
+                    except EndurainApiError:
+                        _LOGGER.warning(
+                            "Failed to fetch streams for latest Endurain activity %s",
+                            activity_id,
+                        )
 
             goals: list[dict[str, Any]] = []
             latest_steps: dict[str, Any] | None = None
@@ -137,6 +149,7 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "notifications": notifications,
                 "summaries": summaries,
                 "latest_activity": latest_activity,
+                "latest_activity_streams": latest_activity_streams,
                 "goals": goals,
                 "latest_steps": latest_steps,
                 "latest_sleep": latest_sleep,
