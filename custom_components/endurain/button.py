@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from homeassistant.components.button import ButtonEntity
+from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -13,22 +13,38 @@ from .const import DOMAIN
 from .entity import EndurainEntity
 
 
-@dataclass(frozen=True)
-class EndurainButtonDescription:
+@dataclass(frozen=True, kw_only=True)
+class EndurainButtonDescription(ButtonEntityDescription):
     """Description of an Endurain button."""
-
-    key: str
-    name: str
-    icon: str
 
 
 BUTTONS: tuple[EndurainButtonDescription, ...] = (
-    EndurainButtonDescription("refresh_data", "Refresh Data", "mdi:refresh"),
-    EndurainButtonDescription("refresh_activities", "Refresh Activities", "mdi:run-fast"),
-    EndurainButtonDescription("sync_strava_gear", "Sync Strava Gear", "mdi:bike-sync"),
-    EndurainButtonDescription("bulk_import", "Run Bulk Import", "mdi:database-import"),
-    EndurainButtonDescription("import_strava_shoes", "Import Strava Shoes", "mdi:shoe-sneaker"),
-    EndurainButtonDescription("import_strava_bikes", "Import Strava Bikes", "mdi:bike"),
+    EndurainButtonDescription(key="refresh_data", name="Refresh Data", icon="mdi:refresh"),
+    EndurainButtonDescription(
+        key="refresh_activities",
+        name="Refresh Activities",
+        icon="mdi:run-fast",
+    ),
+    EndurainButtonDescription(
+        key="sync_strava_gear",
+        name="Sync Strava Gear",
+        icon="mdi:bike-sync",
+    ),
+    EndurainButtonDescription(
+        key="bulk_import",
+        name="Run Bulk Import",
+        icon="mdi:database-import",
+    ),
+    EndurainButtonDescription(
+        key="import_strava_shoes",
+        name="Import Strava Shoes",
+        icon="mdi:shoe-sneaker",
+    ),
+    EndurainButtonDescription(
+        key="import_strava_bikes",
+        name="Import Strava Bikes",
+        icon="mdi:bike",
+    ),
 )
 
 
@@ -55,8 +71,6 @@ class EndurainButton(EndurainEntity, ButtonEntity):
         super().__init__(coordinator, entry)
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
-        self._attr_name = description.name
-        self._attr_icon = description.icon
 
     async def async_press(self) -> None:
         """Handle the button press."""

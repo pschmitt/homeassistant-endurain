@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfMass
 from homeassistant.core import HomeAssistant, callback
@@ -27,19 +32,44 @@ from .coordinator import EndurainCoordinator
 from .entity import EndurainEntity
 
 
-@dataclass(frozen=True)
-class SummaryDescription:
+@dataclass(frozen=True, kw_only=True)
+class SummaryDescription(SensorEntityDescription):
     """Description of a summary sensor."""
-
-    key: str
-    name: str
 
 
 SUMMARY_SENSORS: tuple[SummaryDescription, ...] = (
-    SummaryDescription("weekly", "Weekly Distance"),
-    SummaryDescription("monthly", "Monthly Distance"),
-    SummaryDescription("yearly", "Yearly Distance"),
-    SummaryDescription("lifetime", "Lifetime Distance"),
+    SummaryDescription(
+        key="weekly",
+        name="Weekly Distance",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:map-marker-distance",
+    ),
+    SummaryDescription(
+        key="monthly",
+        name="Monthly Distance",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:map-marker-distance",
+    ),
+    SummaryDescription(
+        key="yearly",
+        name="Yearly Distance",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:map-marker-distance",
+    ),
+    SummaryDescription(
+        key="lifetime",
+        name="Lifetime Distance",
+        device_class=SensorDeviceClass.DISTANCE,
+        native_unit_of_measurement=UnitOfLength.KILOMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+        icon="mdi:map-marker-distance",
+    ),
 )
 
 
@@ -107,11 +137,6 @@ async def async_setup_entry(
 class EndurainSummarySensor(EndurainEntity, SensorEntity):
     """Distance summary sensor."""
 
-    _attr_device_class = SensorDeviceClass.DISTANCE
-    _attr_native_unit_of_measurement = UnitOfLength.KILOMETERS
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:map-marker-distance"
-
     def __init__(
         self,
         coordinator: EndurainCoordinator,
@@ -122,7 +147,6 @@ class EndurainSummarySensor(EndurainEntity, SensorEntity):
         super().__init__(coordinator, entry)
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}_distance"
-        self._attr_name = description.name
 
     @property
     def available(self) -> bool:
