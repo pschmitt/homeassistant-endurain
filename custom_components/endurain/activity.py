@@ -94,7 +94,12 @@ def activity_extra_attributes(activity: Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(activity.get("max_speed"), int | float):
         attrs["max_speed_kmh"] = round(float(activity["max_speed"]) * 3.6, 2)
     if isinstance(activity.get("pace"), int | float) and float(activity["pace"]) > 0:
-        attrs["pace_min_per_km"] = round(1000 / float(activity["pace"]) / 60, 2)
+        # pace is stored as s/m (seconds per metre); convert to min/km
+        pace_min_per_km = float(activity["pace"]) * 1000 / 60
+        attrs["pace_min_per_km"] = round(pace_min_per_km, 2)
+        mins = int(pace_min_per_km)
+        secs = int(round((pace_min_per_km - mins) * 60))
+        attrs["pace_formatted"] = f"{mins}:{secs:02d} /km"
     location = " ".join(
         str(value) for value in (activity.get("city"), activity.get("town"), activity.get("country")) if value
     )

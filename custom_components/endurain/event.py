@@ -25,16 +25,16 @@ async def async_setup_entry(
 
 
 class EndurainWorkoutUploadedEvent(EndurainEntity, EventEntity):
-    """Fire an event when Endurain sees a new latest workout."""
+    """Fire an event when Endurain sees a new latest activity."""
 
     _attr_event_types = ["uploaded"]
     _attr_icon = "mdi:upload"
-    _attr_name = "Workout Uploaded"
+    _attr_name = "Activity Uploaded"
 
     def __init__(self, coordinator, entry: ConfigEntry) -> None:
         """Initialize the event entity."""
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_workout_uploaded"
+        self._attr_unique_id = f"{entry.entry_id}_activity_uploaded"
         self._last_activity_id: int | None = None
 
     async def async_added_to_hass(self) -> None:
@@ -79,7 +79,7 @@ class EndurainWorkoutUploadedEvent(EndurainEntity, EventEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Expose the latest known workout metadata."""
+        """Expose the latest known activity metadata."""
         activity = self._latest_activity
         if activity is None:
             return {}

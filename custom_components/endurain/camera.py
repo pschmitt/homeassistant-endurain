@@ -34,16 +34,16 @@ async def async_setup_entry(
 
 
 class EndurainLatestWorkoutMapCamera(EndurainEntity, Camera):
-    """Camera entity exposing a route preview for the latest workout."""
+    """Camera entity exposing a route preview for the latest activity."""
 
     _attr_icon = "mdi:map-search"
-    _attr_name = "Latest Workout Map"
+    _attr_name = "Latest Activity Map"
 
     def __init__(self, coordinator, entry: ConfigEntry) -> None:
         """Initialize the route camera."""
         super().__init__(coordinator, entry)
         Camera.__init__(self)
-        self._attr_unique_id = f"{entry.entry_id}_latest_workout_map"
+        self._attr_unique_id = f"{entry.entry_id}_latest_activity_map"
         self.content_type = "image/jpeg"
 
     async def async_added_to_hass(self) -> None:
@@ -76,7 +76,7 @@ class EndurainLatestWorkoutMapCamera(EndurainEntity, Camera):
         if len(points) < 2:
             return None
 
-        title = activity_name(activity) or "Latest Workout"
+        title = activity_name(activity) or "Latest Activity"
         distance_km = activity_distance_km(activity)
         timestamp = activity_primary_timestamp(activity)
         subtitle_parts = []

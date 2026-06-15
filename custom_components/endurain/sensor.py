@@ -209,19 +209,19 @@ class EndurainSummarySensor(EndurainEntity, SensorEntity):
 
 
 class EndurainLatestWorkoutSensor(EndurainEntity, SensorEntity):
-    """Latest Endurain workout sensor."""
+    """Latest Endurain activity sensor."""
 
     _attr_icon = "mdi:run-fast"
-    _attr_name = "Latest Workout"
+    _attr_name = "Latest Activity"
 
     def __init__(self, coordinator: EndurainCoordinator, entry: ConfigEntry) -> None:
-        """Initialize the latest workout sensor."""
+        """Initialize the latest activity sensor."""
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_latest_workout"
+        self._attr_unique_id = f"{entry.entry_id}_latest_activity"
 
     @property
     def native_value(self) -> str | None:
-        """Return the latest workout name."""
+        """Return the latest activity name."""
         activity = self._activity
         if activity is None:
             return None
@@ -234,7 +234,7 @@ class EndurainLatestWorkoutSensor(EndurainEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the latest workout metadata."""
+        """Return the latest activity metadata."""
         activity = self._activity
         if activity is None:
             return {}
