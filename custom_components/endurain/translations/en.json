@@ -1,0 +1,66 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Endurain",
+        "description": "Configure access to your Endurain server.",
+        "data": {
+          "url": "Endurain URL",
+          "username": "Username",
+          "password": "Password",
+          "mfa_code": "MFA code",
+          "verify_ssl": "Verify SSL certificate"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Endurain",
+        "description": "Update the Endurain connection details.",
+        "data": {
+          "url": "Endurain URL",
+          "username": "Username",
+          "password": "Password",
+          "mfa_code": "MFA code",
+          "verify_ssl": "Verify SSL certificate"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate Endurain",
+        "description": "Update the password or MFA code for this Endurain account.",
+        "data": {
+          "password": "Password",
+          "mfa_code": "MFA code"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Endurain.",
+      "invalid_auth": "Authentication failed.",
+      "mfa_required": "MFA is required. Provide a current MFA code.",
+      "rate_limited": "Endurain is rate-limiting login attempts. Try again shortly.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This Endurain account is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Endurain options",
+        "data": {
+          "scan_interval": "Polling interval (seconds)",
+          "enable_goals": "Create goal sensors",
+          "enable_health": "Create health sensors",
+          "enable_gears": "Create gear sensors",
+          "enable_lifetime": "Create lifetime summary sensor"
+        }
+      }
+    }
+  },
+  "issues": {
+    "auth_failed": {
+      "title": "Endurain authentication failed",
+      "description": "The Endurain integration \"{title}\" can no longer authenticate. Details: {details}"
+    }
+  }
+}

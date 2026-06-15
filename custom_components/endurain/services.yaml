@@ -1,0 +1,62 @@
+refresh_activities:
+  name: Refresh activities
+  description: Ask Endurain to refresh activities, then refresh Home Assistant entities.
+  fields:
+    config_entry_id:
+      required: false
+      example: 8d8d4f6d2a6b4f2a8f80b7a0cabc1234
+      selector:
+        text:
+sync_recent_strava:
+  name: Sync recent Strava activities
+  description: Import recent Strava activities into Endurain for the selected number of days.
+  fields:
+    config_entry_id:
+      required: false
+      example: 8d8d4f6d2a6b4f2a8f80b7a0cabc1234
+      selector:
+        text:
+    days:
+      required: false
+      default: 7
+      selector:
+        number:
+          min: 1
+          max: 365
+          mode: box
+sync_strava_gear:
+  name: Sync Strava gear
+  description: Import or refresh Strava gear in Endurain, then refresh Home Assistant entities.
+  fields:
+    config_entry_id:
+      required: false
+      example: 8d8d4f6d2a6b4f2a8f80b7a0cabc1234
+      selector:
+        text:
+bulk_import:
+  name: Run bulk import
+  description: Trigger Endurain's bulk-import workflow and then refresh Home Assistant entities.
+  fields:
+    config_entry_id:
+      required: false
+      example: 8d8d4f6d2a6b4f2a8f80b7a0cabc1234
+      selector:
+        text:
+import_strava_shoes:
+  name: Import Strava shoes
+  description: Import shoes from Strava export data and then refresh Home Assistant entities.
+  fields:
+    config_entry_id:
+      required: false
+      example: 8d8d4f6d2a6b4f2a8f80b7a0cabc1234
+      selector:
+        text:
+import_strava_bikes:
+  name: Import Strava bikes
+  description: Import bikes from Strava export data and then refresh Home Assistant entities.
+  fields:
+    config_entry_id:
+      required: false
+      example: 8d8d4f6d2a6b4f2a8f80b7a0cabc1234
+      selector:
+        text:
