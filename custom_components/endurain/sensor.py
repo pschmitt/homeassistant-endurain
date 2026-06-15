@@ -35,6 +35,8 @@ from .activity import (
     activity_name,
     activity_primary_timestamp,
     activity_type_name,
+    activity_url,
+    extract_lap_route_points,
     extract_route_points,
 )
 
@@ -238,6 +240,8 @@ class EndurainLatestWorkoutSensor(EndurainEntity, SensorEntity):
             return {}
         attrs = activity_extra_attributes(activity)
         route_points = extract_route_points(self._streams)
+        if len(route_points) < 2:
+            route_points = extract_lap_route_points(self._laps)
         attrs["has_map"] = len(route_points) >= 2
         attrs["route_point_count"] = len(route_points)
         attrs["map_hidden"] = bool(activity.get("hide_map"))
@@ -245,6 +249,7 @@ class EndurainLatestWorkoutSensor(EndurainEntity, SensorEntity):
         attrs["friendly_activity_type"] = activity_type_name(activity)
         attrs["started_at"] = activity_primary_timestamp(activity)
         attrs["distance_km"] = activity_distance_km(activity)
+        attrs["activity_url"] = activity_url(self.coordinator.client.base_url, activity)
         return attrs
 
     @property
@@ -262,6 +267,14 @@ class EndurainLatestWorkoutSensor(EndurainEntity, SensorEntity):
             return []
         streams = self.coordinator.data.get("latest_activity_streams")
         return streams if isinstance(streams, list) else []
+
+    @property
+    def _laps(self) -> list[dict[str, Any]]:
+        """Return the latest activity laps."""
+        if not self.coordinator.data:
+            return []
+        laps = self.coordinator.data.get("latest_activity_laps")
+        return laps if isinstance(laps, list) else []
 
 
 class EndurainNotificationsSensor(EndurainEntity, SensorEntity):

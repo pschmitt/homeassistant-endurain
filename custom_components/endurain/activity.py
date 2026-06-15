@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from html import escape
 from typing import Any
 
 
@@ -64,6 +63,14 @@ def activity_distance_km(activity: Mapping[str, Any]) -> float | None:
     return None
 
 
+def activity_url(base_url: str, activity: Mapping[str, Any]) -> str | None:
+    """Return the frontend URL for an activity."""
+    activity_id = activity.get("id")
+    if not isinstance(activity_id, int):
+        return None
+    return f"{base_url.rstrip('/')}/activity/{activity_id}"
+
+
 def activity_duration_seconds(activity: Mapping[str, Any]) -> float | None:
     """Return the best-known duration in seconds."""
     for key in ("total_timer_time", "total_elapsed_time"):
@@ -118,54 +125,22 @@ def extract_route_points(streams: list[dict[str, Any]] | None) -> list[tuple[flo
     return route_points
 
 
-def build_route_svg(
-    *,
-    title: str,
-    subtitle: str | None,
-    points: list[tuple[float, float]],
-    width: int = 800,
-    height: int = 600,
-) -> bytes:
-    """Build a simple SVG route preview."""
-    bg = "#f6f1e8"
-    stroke = "#1f5f5b"
-    accent = "#d96c06"
-    text = "#1f2933"
-    grid = "#dfd8cc"
+def extract_lap_route_points(laps: list[dict[str, Any]] | None) -> list[tuple[float, float]]:
+    """Extract route points from lap boundaries."""
+    if not laps:
+        return []
 
-    lines: list[str] = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
-        f'<rect width="{width}" height="{height}" fill="{bg}" />',
-    ]
-
-    for x in range(80, width, 120):
-        lines.append(f'<line x1="{x}" y1="0" x2="{x}" y2="{height}" stroke="{grid}" stroke-width="1" />')
-    for y in range(80, height, 120):
-        lines.append(f'<line x1="0" y1="{y}" x2="{width}" y2="{y}" stroke="{grid}" stroke-width="1" />')
-
-    lines.append(f'<text x="36" y="48" font-size="28" font-family="Arial, sans-serif" fill="{text}">{escape(title)}</text>')
-    if subtitle:
-        lines.append(
-            f'<text x="36" y="78" font-size="18" font-family="Arial, sans-serif" fill="{text}" opacity="0.75">{escape(subtitle)}</text>'
-        )
-
-    if len(points) >= 2:
-        polyline = " ".join(f"{x:.2f},{y:.2f}" for x, y in _scale_points(points, width, height))
-        scaled = _scale_points(points, width, height)
-        start_x, start_y = scaled[0]
-        end_x, end_y = scaled[-1]
-        lines.append(
-            f'<polyline points="{polyline}" fill="none" stroke="{stroke}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />'
-        )
-        lines.append(f'<circle cx="{start_x:.2f}" cy="{start_y:.2f}" r="11" fill="{accent}" />')
-        lines.append(f'<circle cx="{end_x:.2f}" cy="{end_y:.2f}" r="11" fill="{stroke}" />')
-    else:
-        lines.append(
-            f'<text x="{width / 2:.0f}" y="{height / 2:.0f}" text-anchor="middle" font-size="22" font-family="Arial, sans-serif" fill="{text}" opacity="0.65">No route data available</text>'
-        )
-
-    lines.append("</svg>")
-    return "\n".join(lines).encode("utf-8")
+    points: list[tuple[float, float]] = []
+    for lap in laps:
+        if not isinstance(lap, Mapping):
+            continue
+        start = _extract_point(lap)
+        end = _extract_lap_end_point(lap)
+        if start is not None and (not points or points[-1] != start):
+            points.append(start)
+        if end is not None and (not points or points[-1] != end):
+            points.append(end)
+    return points
 
 
 def _extract_point(waypoint: Any) -> tuple[float, float] | None:
@@ -197,27 +172,12 @@ def _extract_point(waypoint: Any) -> tuple[float, float] | None:
     return None
 
 
-def _scale_points(
-    points: list[tuple[float, float]],
-    width: int,
-    height: int,
-) -> list[tuple[float, float]]:
-    """Scale GPS points into the SVG viewport."""
-    margin_x = width * 0.08
-    margin_y = height * 0.12
-    xs = [point[1] for point in points]
-    ys = [point[0] for point in points]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
-    span_x = max(max_x - min_x, 1e-9)
-    span_y = max(max_y - min_y, 1e-9)
-    scale = min((width - 2 * margin_x) / span_x, (height - 2 * margin_y) / span_y)
-    offset_x = (width - span_x * scale) / 2
-    offset_y = (height - span_y * scale) / 2
-
-    scaled: list[tuple[float, float]] = []
-    for lat, lon in points:
-        x = (lon - min_x) * scale + offset_x
-        y = height - ((lat - min_y) * scale + offset_y)
-        scaled.append((x, y))
-    return scaled
+def _extract_lap_end_point(waypoint: Any) -> tuple[float, float] | None:
+    """Extract a lap end point."""
+    if not isinstance(waypoint, Mapping):
+        return None
+    lat = waypoint.get("end_position_lat")
+    lon = waypoint.get("end_position_long")
+    if isinstance(lat, int | float) and isinstance(lon, int | float):
+        return float(lat), float(lon)
+    return None

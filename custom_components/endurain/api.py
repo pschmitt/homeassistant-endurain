@@ -198,6 +198,18 @@ class EndurainApiClient:
             raise EndurainApiError("Unexpected activity streams payload")
         return [dict(item) for item in data if isinstance(item, Mapping)]
 
+    async def async_fetch_activity_laps(self, activity_id: int) -> list[dict[str, Any]]:
+        """Fetch all laps for the given activity."""
+        data = await self._request_json(
+            "get",
+            f"/api/v1/activities_laps/activity_id/{activity_id}/all",
+        )
+        if data is None:
+            return []
+        if not isinstance(data, list):
+            raise EndurainApiError("Unexpected activity laps payload")
+        return [dict(item) for item in data if isinstance(item, Mapping)]
+
     async def async_fetch_notifications_number(self) -> int:
         """Fetch the unread notifications count."""
         data = await self._request_json("get", "/api/v1/notifications/number")

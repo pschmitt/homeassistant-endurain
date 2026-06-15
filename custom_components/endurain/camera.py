@@ -15,6 +15,8 @@ from .activity import (
     activity_distance_km,
     activity_name,
     activity_primary_timestamp,
+    activity_url,
+    extract_lap_route_points,
     extract_route_points,
 )
 from .const import DOMAIN
@@ -51,7 +53,7 @@ class EndurainLatestWorkoutMapCamera(EndurainEntity, Camera):
             return False
         if activity.get("hide_map"):
             return False
-        return bool(extract_route_points(self._streams))
+        return len(self._route_points) >= 2
 
     async def async_camera_image(
         self,
@@ -63,7 +65,7 @@ class EndurainLatestWorkoutMapCamera(EndurainEntity, Camera):
         if activity is None or activity.get("hide_map"):
             return None
 
-        points = extract_route_points(self._streams)
+        points = self._route_points
         if len(points) < 2:
             return None
 
@@ -104,6 +106,7 @@ class EndurainLatestWorkoutMapCamera(EndurainEntity, Camera):
             "started_at": activity_primary_timestamp(activity),
             "route_point_count": len(points),
             "map_hidden": bool(activity.get("hide_map")),
+            "activity_url": activity_url(self.coordinator.client.base_url, activity),
             "content_type": self.content_type,
         }
 
@@ -122,6 +125,22 @@ class EndurainLatestWorkoutMapCamera(EndurainEntity, Camera):
             return []
         streams = self.coordinator.data.get("latest_activity_streams")
         return streams if isinstance(streams, list) else []
+
+    @property
+    def _laps(self) -> list[dict[str, Any]]:
+        """Return the latest activity laps."""
+        if not self.coordinator.data:
+            return []
+        laps = self.coordinator.data.get("latest_activity_laps")
+        return laps if isinstance(laps, list) else []
+
+    @property
+    def _route_points(self) -> list[tuple[float, float]]:
+        """Return the best available route points."""
+        points = extract_route_points(self._streams)
+        if len(points) >= 2:
+            return points
+        return extract_lap_route_points(self._laps)
 
 
 def _build_route_jpeg(

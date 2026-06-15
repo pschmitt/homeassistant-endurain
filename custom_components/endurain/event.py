@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .activity import activity_url
 from .const import DOMAIN
 from .entity import EndurainEntity
 
@@ -71,6 +72,7 @@ class EndurainWorkoutUploadedEvent(EndurainEntity, EventEntity):
                     or activity.get("start_time"),
                     "activity_type": activity.get("activity_type"),
                     "gear_id": activity.get("gear_id"),
+                    "activity_url": activity_url(self.coordinator.client.base_url, activity),
                 },
             )
         self.async_write_ha_state()
@@ -89,6 +91,7 @@ class EndurainWorkoutUploadedEvent(EndurainEntity, EventEntity):
             or activity.get("start_time"),
             "latest_activity_distance_km": round(float(activity.get("distance", 0.0)) / 1000, 2),
             "latest_activity_gear_id": activity.get("gear_id"),
+            "latest_activity_url": activity_url(self.coordinator.client.base_url, activity),
         }
 
     @property

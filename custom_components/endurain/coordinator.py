@@ -88,6 +88,7 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             }
             latest_activity = None
             latest_activity_streams: list[dict[str, Any]] = []
+            latest_activity_laps: list[dict[str, Any]] = []
             user_id = profile.get("id")
             if isinstance(user_id, int):
                 latest_activity = await self.client.async_fetch_latest_activity(user_id)
@@ -100,6 +101,15 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     except EndurainApiError:
                         _LOGGER.warning(
                             "Failed to fetch streams for latest Endurain activity %s",
+                            activity_id,
+                        )
+                    try:
+                        latest_activity_laps = await self.client.async_fetch_activity_laps(
+                            activity_id
+                        )
+                    except EndurainApiError:
+                        _LOGGER.warning(
+                            "Failed to fetch laps for latest Endurain activity %s",
                             activity_id,
                         )
 
@@ -150,6 +160,7 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "summaries": summaries,
                 "latest_activity": latest_activity,
                 "latest_activity_streams": latest_activity_streams,
+                "latest_activity_laps": latest_activity_laps,
                 "goals": goals,
                 "latest_steps": latest_steps,
                 "latest_sleep": latest_sleep,
