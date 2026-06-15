@@ -28,7 +28,7 @@ BUTTONS: tuple[EndurainButtonDescription, ...] = (
     EndurainButtonDescription(
         key="sync_strava_gear",
         name="Sync Strava Gear",
-        icon="mdi:bike-sync",
+        icon="mdi:cog-sync",
     ),
     EndurainButtonDescription(
         key="bulk_import",
