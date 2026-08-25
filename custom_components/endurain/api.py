@@ -237,6 +237,8 @@ class EndurainApiClient:
         gears = await self._request_json("get", "/api/v1/gears")
         if gears is None:
             return []
+        if isinstance(gears, Mapping):
+            gears = gears.get("records")
         if not isinstance(gears, list):
             raise EndurainApiError("Unexpected gears payload")
 
