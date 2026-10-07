@@ -98,6 +98,7 @@ async def async_setup_entry(
         [
             EndurainLatestWorkoutSensor(coordinator, entry),
             EndurainNotificationsSensor(coordinator, entry),
+            EndurainActiveDaysSensor(coordinator, entry),
             EndurainStepsSensor(coordinator, entry),
             EndurainSleepSensor(coordinator, entry),
             EndurainWeightSensor(coordinator, entry),
@@ -275,6 +276,44 @@ class EndurainLatestWorkoutSensor(EndurainEntity, SensorEntity):
             return []
         laps = self.coordinator.data.get("latest_activity_laps")
         return laps if isinstance(laps, list) else []
+
+
+class EndurainActiveDaysSensor(EndurainEntity, SensorEntity):
+    """Per-day activity summary, suited for calendar heatmap cards."""
+
+    _attr_icon = "mdi:calendar-check"
+    _attr_name = "Active Days"
+    _attr_native_unit_of_measurement = "days"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: EndurainCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the active days sensor."""
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{entry.entry_id}_active_days"
+
+    @property
+    def _days(self) -> dict[str, list[float]]:
+        """Return {date: [activity_count, distance_km]} for recent activities."""
+        days: dict[str, list[float]] = {}
+        activities = (self.coordinator.data or {}).get("recent_activities") or []
+        for activity in activities:
+            timestamp = activity_primary_timestamp(activity)
+            if not timestamp:
+                continue
+            entry = days.setdefault(timestamp[:10], [0, 0.0])
+            entry[0] += 1
+            entry[1] = round(entry[1] + (activity_distance_km(activity) or 0.0), 2)
+        return dict(sorted(days.items()))
+
+    @property
+    def native_value(self) -> int:
+        """Return the number of days with at least one activity."""
+        return len(self._days)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the per-day activity map."""
+        return {"days": self._days}
 
 
 class EndurainNotificationsSensor(EndurainEntity, SensorEntity):

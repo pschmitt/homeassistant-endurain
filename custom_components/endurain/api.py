@@ -186,6 +186,20 @@ class EndurainApiClient:
                 return dict(item)
         return None
 
+    async def async_fetch_recent_activities(
+        self, user_id: int, num_records: int = 400
+    ) -> list[dict[str, Any]]:
+        """Fetch the most recent activities for the configured user."""
+        data = await self._request_json(
+            "get",
+            f"/api/v1/activities/user/{user_id}/page_number/1/num_records/{num_records}",
+        )
+        if data is None:
+            return []
+        if not isinstance(data, list):
+            raise EndurainApiError("Unexpected recent activities payload")
+        return [dict(item) for item in data if isinstance(item, Mapping)]
+
     async def async_fetch_activity_streams(self, activity_id: int) -> list[dict[str, Any]]:
         """Fetch all activity streams for the given activity."""
         data = await self._request_json(
