@@ -17,6 +17,16 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify
 
+from .activity import (
+    activity_distance_km,
+    activity_extra_attributes,
+    activity_name,
+    activity_primary_timestamp,
+    activity_type_name,
+    activity_url,
+    extract_lap_route_points,
+    extract_route_points,
+)
 from .const import (
     ATTR_ACTIVITY_COUNT,
     ATTR_BREAKDOWN,
@@ -29,16 +39,6 @@ from .const import (
 )
 from .coordinator import EndurainCoordinator
 from .entity import EndurainEntity
-from .activity import (
-    activity_distance_km,
-    activity_extra_attributes,
-    activity_name,
-    activity_primary_timestamp,
-    activity_type_name,
-    activity_url,
-    extract_lap_route_points,
-    extract_route_points,
-)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -91,8 +91,7 @@ async def async_setup_entry(
     coordinator: EndurainCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     static_entities: list[SensorEntity] = [
-        EndurainSummarySensor(coordinator, entry, description)
-        for description in SUMMARY_SENSORS
+        EndurainSummarySensor(coordinator, entry, description) for description in SUMMARY_SENSORS
     ]
     static_entities.extend(
         [
@@ -128,7 +127,9 @@ async def async_setup_entry(
 
         for gear in data.get("gear_stats", []):
             gear_id = gear.get("id")
-            unique_suffix = gear_id if gear_id is not None else slugify(str(gear.get("nickname", "gear")))
+            unique_suffix = (
+                gear_id if gear_id is not None else slugify(str(gear.get("nickname", "gear")))
+            )
             unique_id = f"{entry.entry_id}_gear_{unique_suffix}"
             current_ids.add(unique_id)
             if unique_id in known_dynamic_ids:

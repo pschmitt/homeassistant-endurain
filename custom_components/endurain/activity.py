@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-
 ACTIVITY_TYPE_NAMES: dict[int, str] = {
     1: "Run",
     2: "Bike",
@@ -101,7 +100,9 @@ def activity_extra_attributes(activity: Mapping[str, Any]) -> dict[str, Any]:
         secs = int(round((pace_min_per_km - mins) * 60))
         attrs["pace_formatted"] = f"{mins}:{secs:02d} /km"
     location = " ".join(
-        str(value) for value in (activity.get("city"), activity.get("town"), activity.get("country")) if value
+        str(value)
+        for value in (activity.get("city"), activity.get("town"), activity.get("country"))
+        if value
     )
     attrs["location"] = location or None
     return attrs

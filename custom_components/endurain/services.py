@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
@@ -14,13 +13,12 @@ from homeassistant.helpers import config_validation as cv
 from .const import (
     DOMAIN,
     SERVICE_BULK_IMPORT,
-    SERVICE_REFRESH_ACTIVITIES,
     SERVICE_IMPORT_STRAVA_BIKES,
     SERVICE_IMPORT_STRAVA_SHOES,
+    SERVICE_REFRESH_ACTIVITIES,
     SERVICE_SYNC_RECENT_STRAVA,
     SERVICE_SYNC_STRAVA_GEAR,
 )
-
 
 SERVICE_SCHEMA = vol.Schema(
     {

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
 import logging
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -26,7 +26,12 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
-from .exceptions import EndurainApiError, EndurainAuthError, EndurainMfaRequiredError, EndurainRateLimitError
+from .exceptions import (
+    EndurainApiError,
+    EndurainAuthError,
+    EndurainMfaRequiredError,
+    EndurainRateLimitError,
+)
 from .repairs import async_create_auth_issue, async_delete_auth_issue
 
 _LOGGER = logging.getLogger(__name__)
@@ -83,8 +88,7 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             profile = results[1]
             notifications = results[2]
             summaries = {
-                key: results[index]
-                for index, key in enumerate(summary_coros.keys(), start=3)
+                key: results[index] for index, key in enumerate(summary_coros.keys(), start=3)
             }
             latest_activity = None
             recent_activities: list[dict[str, Any]] = []
@@ -97,7 +101,9 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     recent_activities = await self.client.async_fetch_recent_activities(user_id)
                 except EndurainApiError:
                     _LOGGER.warning("Failed to fetch recent Endurain activities")
-                activity_id = latest_activity.get("id") if isinstance(latest_activity, dict) else None
+                activity_id = (
+                    latest_activity.get("id") if isinstance(latest_activity, dict) else None
+                )
                 if isinstance(activity_id, int):
                     try:
                         latest_activity_streams = await self.client.async_fetch_activity_streams(

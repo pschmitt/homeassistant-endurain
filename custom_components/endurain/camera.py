@@ -34,9 +34,7 @@ _TILE_CACHE_MAX = 256
 _MAX_TILES_PER_SIDE = 4  # cap tile grid to 4×4 per dimension (+ 1-tile border = 6×6 max)
 _MIN_ZOOM = 3
 _MAX_ZOOM = 17
-_OSM_USER_AGENT = (
-    "homeassistant-endurain/1.0 (+https://github.com/pschmitt/homeassistant-endurain)"
-)
+_OSM_USER_AGENT = "homeassistant-endurain/1.0 (+https://github.com/pschmitt/homeassistant-endurain)"
 _OSM_ATTRIBUTION = "© OpenStreetMap contributors"
 
 _tile_cache: OrderedDict[tuple[int, int, int], bytes] = OrderedDict()
@@ -52,17 +50,14 @@ def _osm_semaphore() -> asyncio.Semaphore:
 
 # --- Slippy-map tile math (Web Mercator / EPSG:3857) ---
 
+
 def _lon_to_tile_x(lon: float, zoom: int) -> float:
-    return (lon + 180.0) / 360.0 * (2 ** zoom)
+    return (lon + 180.0) / 360.0 * (2**zoom)
 
 
 def _lat_to_tile_y(lat: float, zoom: int) -> float:
     lat_r = math.radians(max(-85.0, min(85.0, lat)))
-    return (
-        (1.0 - math.log(math.tan(lat_r) + 1.0 / math.cos(lat_r)) / math.pi)
-        / 2.0
-        * (2 ** zoom)
-    )
+    return (1.0 - math.log(math.tan(lat_r) + 1.0 / math.cos(lat_r)) / math.pi) / 2.0 * (2**zoom)
 
 
 def _pick_zoom(points: list[tuple[float, float]]) -> int:
@@ -78,6 +73,7 @@ def _pick_zoom(points: list[tuple[float, float]]) -> int:
 
 
 # --- Tile fetching ---
+
 
 async def _fetch_tile(session, z: int, x: int, y: int) -> bytes | None:
     """Fetch one OSM tile, serving from in-memory LRU cache when available."""
@@ -118,7 +114,7 @@ async def _build_osm_background(
     zoom = _pick_zoom(points)
     lats = [p[0] for p in points]
     lons = [p[1] for p in points]
-    n = 2 ** zoom
+    n = 2**zoom
 
     # Tile grid that covers the route bounding box, padded by 1 tile on each side
     x_min = max(0, int(_lon_to_tile_x(min(lons), zoom)) - 1)
@@ -171,6 +167,7 @@ async def _build_osm_background(
 
 
 # --- HA platform wiring ---
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -307,6 +304,7 @@ class EndurainLatestWorkoutMapCamera(EndurainEntity, Camera):
 
 
 # --- Image rendering ---
+
 
 def _build_route_jpeg(
     *,

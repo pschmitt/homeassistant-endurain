@@ -6,12 +6,25 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
-from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_URL, CONF_USERNAME, CONF_VERIFY_SSL
+from homeassistant.const import (
+    CONF_PASSWORD,
+    CONF_SCAN_INTERVAL,
+    CONF_URL,
+    CONF_USERNAME,
+    CONF_VERIFY_SSL,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
-from homeassistant.helpers.selector import BooleanSelector, NumberSelector, NumberSelectorConfig, NumberSelectorMode, TextSelector, TextSelectorConfig, TextSelectorType
+from homeassistant.helpers.selector import (
+    BooleanSelector,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
 from .api import EndurainApiClient
 from .const import (
@@ -29,7 +42,12 @@ from .const import (
     DOMAIN,
     MIN_SCAN_INTERVAL,
 )
-from .exceptions import EndurainApiError, EndurainAuthError, EndurainMfaRequiredError, EndurainRateLimitError
+from .exceptions import (
+    EndurainApiError,
+    EndurainAuthError,
+    EndurainMfaRequiredError,
+    EndurainRateLimitError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,7 +84,7 @@ class EndurainConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry: ConfigEntry) -> "EndurainOptionsFlow":
+    def async_get_options_flow(config_entry: ConfigEntry) -> EndurainOptionsFlow:
         """Return the options flow."""
         return EndurainOptionsFlow(config_entry)
 
