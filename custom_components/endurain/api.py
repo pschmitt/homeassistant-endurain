@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -157,7 +158,11 @@ class EndurainApiClient:
 
     async def async_fetch_summary(self, view_type: str) -> dict[str, Any]:
         """Fetch a summary view."""
-        data = await self._request_json("get", f"/api/v1/activities_summaries/{view_type}")
+        data = await self._request_json(
+            "get",
+            "/api/v1/activities/summaries",
+            params={"period": view_type},
+        )
         if not isinstance(data, Mapping):
             raise EndurainApiError(f"Unexpected {view_type} summary payload")
         return dict(data)
@@ -173,56 +178,36 @@ class EndurainApiClient:
 
     async def async_fetch_latest_activity(self, user_id: int) -> dict[str, Any] | None:
         """Fetch the most recent activity for the configured user."""
-        data = await self._request_json(
-            "get",
-            f"/api/v1/activities/user/{user_id}/page_number/1/num_records/1",
+        activities = await self._fetch_all_pages(
+            f"/api/v1/activities/users/{user_id}",
+            page_size=1,
+            limit=1,
         )
-        if data is None:
-            return None
-        if not isinstance(data, list):
-            raise EndurainApiError("Unexpected latest activity payload")
-        for item in data:
-            if isinstance(item, Mapping):
-                return dict(item)
-        return None
+        return activities[0] if activities else None
 
     async def async_fetch_recent_activities(
         self, user_id: int, num_records: int = 400
     ) -> list[dict[str, Any]]:
         """Fetch the most recent activities for the configured user."""
-        data = await self._request_json(
-            "get",
-            f"/api/v1/activities/user/{user_id}/page_number/1/num_records/{num_records}",
+        return await self._fetch_all_pages(
+            f"/api/v1/activities/users/{user_id}",
+            page_size=200,
+            limit=num_records,
         )
-        if data is None:
-            return []
-        if not isinstance(data, list):
-            raise EndurainApiError("Unexpected recent activities payload")
-        return [dict(item) for item in data if isinstance(item, Mapping)]
 
     async def async_fetch_activity_streams(self, activity_id: int) -> list[dict[str, Any]]:
         """Fetch all activity streams for the given activity."""
-        data = await self._request_json(
-            "get",
-            f"/api/v1/activities_streams/activity_id/{activity_id}/all",
+        return await self._fetch_all_pages(
+            f"/api/v1/activities/{activity_id}/streams",
+            page_size=200,
         )
-        if data is None:
-            return []
-        if not isinstance(data, list):
-            raise EndurainApiError("Unexpected activity streams payload")
-        return [dict(item) for item in data if isinstance(item, Mapping)]
 
     async def async_fetch_activity_laps(self, activity_id: int) -> list[dict[str, Any]]:
         """Fetch all laps for the given activity."""
-        data = await self._request_json(
-            "get",
-            f"/api/v1/activities_laps/activity_id/{activity_id}/all",
+        return await self._fetch_all_pages(
+            f"/api/v1/activities/{activity_id}/laps",
+            page_size=200,
         )
-        if data is None:
-            return []
-        if not isinstance(data, list):
-            raise EndurainApiError("Unexpected activity laps payload")
-        return [dict(item) for item in data if isinstance(item, Mapping)]
 
     async def async_fetch_notifications_number(self) -> int:
         """Fetch the unread notifications count."""
@@ -264,9 +249,10 @@ class EndurainApiClient:
             gear_id = gear_dict.get("id")
             activities: list[dict[str, Any]] = []
             if gear_id is not None:
-                payload = await self._request_json("get", f"/api/v1/activities/gear/{gear_id}")
-                if isinstance(payload, list):
-                    activities = [dict(item) for item in payload if isinstance(item, Mapping)]
+                activities = await self._fetch_all_pages(
+                    f"/api/v1/activities/gears/{gear_id}",
+                    page_size=200,
+                )
             enriched.append(self._build_gear_stats(gear_dict, activities))
         return enriched
 
@@ -289,19 +275,71 @@ class EndurainApiClient:
 
     async def async_refresh_activities(self) -> None:
         """Trigger an activity refresh."""
-        await self._request_json("get", "/api/v1/activities/refresh")
+        await self._request_json("post", "/api/v1/activities/refresh")
 
     async def async_bulk_import(self) -> None:
         """Trigger Endurain's bulk import pipeline."""
-        await self._request_json("post", "/api/v1/activities/create/bulkimport")
+        await self._request_json("post", "/api/v1/activities/bulk-import/folder")
 
-    async def async_import_strava_shoes(self) -> None:
+    async def _fetch_all_pages(
+        self,
+        path: str,
+        *,
+        page_size: int,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Fetch every page from an Endurain paginated endpoint."""
+        records: list[dict[str, Any]] = []
+        page_number = 1
+        while limit is None or len(records) < limit:
+            data = await self._request_json(
+                "get",
+                path,
+                params={"page_number": page_number, "num_records": page_size},
+            )
+            if not isinstance(data, Mapping):
+                raise EndurainApiError("Unexpected paginated response")
+            items = data.get("items")
+            if not isinstance(items, list):
+                raise EndurainApiError("Paginated response is missing items")
+
+            records.extend(dict(item) for item in items if isinstance(item, Mapping))
+            next_page = data.get("next")
+            if next_page is None or not items:
+                break
+            if not isinstance(next_page, int) or next_page <= page_number:
+                raise EndurainApiError("Invalid pagination cursor")
+            page_number = next_page
+
+        return records[:limit] if limit is not None else records
+
+    async def async_import_strava_shoes(self, file_path: str) -> None:
         """Import shoes from Strava export data."""
-        await self._request_json("post", "/api/v1/strava/import/shoes")
+        await self._async_import_strava_csv("/api/v1/strava/import/shoes", file_path)
 
-    async def async_import_strava_bikes(self) -> None:
+    async def async_import_strava_bikes(self, file_path: str) -> None:
         """Import bikes from Strava export data."""
-        await self._request_json("post", "/api/v1/strava/import/bikes")
+        await self._async_import_strava_csv("/api/v1/strava/import/bikes", file_path)
+
+    async def _async_import_strava_csv(self, endpoint: str, file_path: str) -> None:
+        """Upload a Strava export CSV to Endurain."""
+        path = Path(file_path)
+        try:
+            contents = await asyncio.to_thread(path.read_bytes)
+        except OSError as err:
+            raise EndurainApiError(f"Could not read Strava export file: {path}") from err
+
+        await self._request_json(
+            "post",
+            endpoint,
+            data_factory=lambda: self._strava_csv_form(contents, path.name),
+        )
+
+    def _strava_csv_form(self, contents: bytes, filename: str) -> aiohttp.FormData:
+        """Create a fresh multipart body for an uploaded Strava CSV."""
+        form = aiohttp.FormData()
+        form.add_field("file", contents, filename=filename, content_type="text/csv")
+        return form
 
     async def _request_json(
         self,
@@ -310,12 +348,16 @@ class EndurainApiClient:
         *,
         params: dict[str, Any] | None = None,
         auth: bool = True,
+        data: Any = None,
+        data_factory: Callable[[], Any] | None = None,
     ) -> Any:
         """Perform an API request and parse the response body."""
         response = await self._raw_request(
             method,
             path,
             params=params,
+            data=data,
+            data_factory=data_factory,
             auth=auth,
             retry_on_auth=True,
         )
@@ -337,7 +379,8 @@ class EndurainApiClient:
         path: str,
         *,
         params: dict[str, Any] | None = None,
-        data: dict[str, Any] | None = None,
+        data: Any = None,
+        data_factory: Callable[[], Any] | None = None,
         json_data: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
         auth: bool = True,
@@ -359,7 +402,7 @@ class EndurainApiClient:
                 method.upper(),
                 f"{self._base_url}{path}",
                 params=params,
-                data=data,
+                data=data_factory() if data_factory else data,
                 json=json_data,
                 headers=request_headers,
                 timeout=aiohttp.ClientTimeout(total=30),
@@ -377,7 +420,7 @@ class EndurainApiClient:
                     method.upper(),
                     f"{self._base_url}{path}",
                     params=params,
-                    data=data,
+                    data=data_factory() if data_factory else data,
                     json=json_data,
                     headers=request_headers,
                     timeout=aiohttp.ClientTimeout(total=30),

@@ -35,16 +35,6 @@ BUTTONS: tuple[EndurainButtonDescription, ...] = (
         name="Run Bulk Import",
         icon="mdi:database-import",
     ),
-    EndurainButtonDescription(
-        key="import_strava_shoes",
-        name="Import Strava Shoes",
-        icon="mdi:shoe-sneaker",
-    ),
-    EndurainButtonDescription(
-        key="import_strava_bikes",
-        name="Import Strava Bikes",
-        icon="mdi:bike",
-    ),
 )
 
 
@@ -84,8 +74,4 @@ class EndurainButton(EndurainEntity, ButtonEntity):
             await client.async_sync_strava_gear()
         elif self.entity_description.key == "bulk_import":
             await client.async_bulk_import()
-        elif self.entity_description.key == "import_strava_shoes":
-            await client.async_import_strava_shoes()
-        elif self.entity_description.key == "import_strava_bikes":
-            await client.async_import_strava_bikes()
         await self.coordinator.async_request_refresh()

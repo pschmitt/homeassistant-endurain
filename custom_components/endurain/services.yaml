@@ -44,19 +44,29 @@ bulk_import:
         text:
 import_strava_shoes:
   name: Import Strava shoes
-  description: Import shoes from Strava export data and then refresh Home Assistant entities.
+  description: Upload shoes.csv from a Strava export, then refresh Home Assistant entities.
   fields:
     config_entry_id:
       required: false
       example: 8d8d4f6d2a6b4f2a8f80b7a0cabc1234
       selector:
         text:
+    file_path:
+      required: true
+      example: /config/strava-export/shoes.csv
+      selector:
+        text:
 import_strava_bikes:
   name: Import Strava bikes
-  description: Import bikes from Strava export data and then refresh Home Assistant entities.
+  description: Upload bikes.csv from a Strava export, then refresh Home Assistant entities.
   fields:
     config_entry_id:
       required: false
       example: 8d8d4f6d2a6b4f2a8f80b7a0cabc1234
+      selector:
+        text:
+    file_path:
+      required: true
+      example: /config/strava-export/bikes.csv
       selector:
         text:

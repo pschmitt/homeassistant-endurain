@@ -32,6 +32,12 @@ SYNC_RECENT_STRAVA_SCHEMA = vol.Schema(
         vol.Optional("days", default=7): vol.All(vol.Coerce(int), vol.Range(min=1, max=365)),
     }
 )
+STRAVA_IMPORT_SCHEMA = vol.Schema(
+    {
+        vol.Optional("config_entry_id"): cv.string,
+        vol.Required("file_path"): cv.string,
+    }
+)
 
 
 async def async_register_services(hass: HomeAssistant) -> None:
@@ -66,13 +72,13 @@ async def async_register_services(hass: HomeAssistant) -> None:
     async def async_import_strava_shoes(call: ServiceCall) -> None:
         entry, client, coordinator = _resolve_entry(hass, call.data)
         del entry
-        await client.async_import_strava_shoes()
+        await client.async_import_strava_shoes(call.data["file_path"])
         await coordinator.async_request_refresh()
 
     async def async_import_strava_bikes(call: ServiceCall) -> None:
         entry, client, coordinator = _resolve_entry(hass, call.data)
         del entry
-        await client.async_import_strava_bikes()
+        await client.async_import_strava_bikes(call.data["file_path"])
         await coordinator.async_request_refresh()
 
     hass.services.async_register(
@@ -103,13 +109,13 @@ async def async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_IMPORT_STRAVA_SHOES,
         async_import_strava_shoes,
-        schema=SERVICE_SCHEMA,
+        schema=STRAVA_IMPORT_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,
         SERVICE_IMPORT_STRAVA_BIKES,
         async_import_strava_bikes,
-        schema=SERVICE_SCHEMA,
+        schema=STRAVA_IMPORT_SCHEMA,
     )
 
 

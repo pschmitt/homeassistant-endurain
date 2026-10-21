@@ -10,7 +10,7 @@ It creates a single service device for your Endurain account and exposes:
 - per-goal progress sensors
 - per-gear distance sensors with usage metadata
 - a `event.workout_uploaded` entity that fires when Endurain's latest activity changes
-- button entities for refresh, bulk import, Strava gear sync, and Strava bike/shoe imports
+- button entities for refresh, bulk import, and Strava gear sync
 - service actions for Strava and activity sync workflows
 
 ## Features
@@ -28,6 +28,9 @@ It creates a single service device for your Endurain account and exposes:
 - `endurain.sync_recent_strava`
 - `endurain.sync_strava_gear`
 - `endurain.refresh_activities`
+- `endurain.import_strava_shoes` and `endurain.import_strava_bikes` accept `file_path` pointing to the matching CSV from a Strava export.
+
+The API client supports Endurain v0.20's paginated activity endpoints and background refresh jobs.
 
 ## Licensing
 
