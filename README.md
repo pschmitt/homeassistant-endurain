@@ -1,49 +1,42 @@
-# Endurain for Home Assistant
+<p align="center">
+  <img src="logo.png" width="128" alt="Endurain logo">
+</p>
 
-[![Open this integration in Home Assistant Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=pschmitt&repository=homeassistant-endurain&category=integration)
+<p align="center">
+  <a href="https://my.home-assistant.io/redirect/marketplace_repository/?owner=pschmitt&amp;repository=homeassistant-endurain&amp;category=integration"><img src="https://my.home-assistant.io/badges/marketplace_repository.svg" alt="Open this integration in Home Assistant Marketplace"></a>
+</p>
 
-`endurain` is a Home Assistant custom integration for the self-hosted fitness tracking service [Endurain](https://github.com/endurain-project/endurain).
+<h1 align="center">Endurain for Home Assistant</h1>
 
-It creates a single service device for your Endurain account and exposes:
-
-- weekly, monthly, yearly, and lifetime distance summaries
-- unread notification count
-- latest steps, sleep, and weight metrics
-- per-goal progress sensors
-- per-gear distance sensors with usage metadata
-- a `event.workout_uploaded` entity that fires when Endurain's latest activity changes
-- button entities for refresh, bulk import, and Strava gear sync
-- service actions for Strava and activity sync workflows
+<p align="center">Track activity summaries, goals and gear from a self-hosted Endurain account in Home Assistant.</p>
 
 ## Features
 
-- UI-based setup with config flow
-- reconfigure and reauth support
-- coordinator-based polling
-- diagnostics support
-- repair issue creation on authentication failures
-- dynamic entities for goals and gear
-- an event entity for new workout uploads
+- **Activity summaries:** Show weekly, monthly, yearly and lifetime distance, plus recent steps, sleep and weight.
+- **Goals and gear:** Create progress and distance sensors for each goal and piece of gear.
+- **Workout events:** Emit a workout-uploaded event when the latest activity changes.
+- **Account controls:** Refresh, bulk import and sync Strava gear with button entities and `endurain` actions.
+- **Account recovery:** Reconfigure or reauthenticate through the UI; authentication failures raise repairs.
 
 ## Install
 
-Use the badge above to add this repository as a custom integration in Home
-Assistant Marketplace (Home Assistant 2026.11 or later), then install it and
-restart Home Assistant. On older versions, add the repository as a custom
-integration in HACS. Go to **Settings → Devices & services → Add integration**,
-select **Endurain**, and provide your Endurain server URL and account details.
+Use the Marketplace badge above on Home Assistant 2026.11 or later to add this
+repository as a custom integration. On older versions, add it as a HACS
+custom repository of type **Integration**. Install and restart Home Assistant.
+The badge does not imply a public catalog listing.
 
-## Services
+## Quick start
 
-- `endurain.sync_recent_strava`
-- `endurain.sync_strava_gear`
-- `endurain.refresh_activities`
-- `endurain.import_strava_shoes` and `endurain.import_strava_bikes` accept `file_path` pointing to the matching CSV from a Strava export.
+1. Go to **Settings → Devices & services → Add integration** and select **Endurain**.
+2. Enter your [Endurain](https://github.com/endurain-project/endurain) server URL
+   and account details.
+3. Open the Endurain device to inspect distance, notifications, goals and gear.
 
-The API client supports Endurain v0.20's paginated activity endpoints and background refresh jobs.
+The integration also supports Endurain v0.20 paginated activities and background
+refresh jobs. Strava import actions take `file_path` for the matching CSV from
+a Strava export.
 
-## Licensing
+## License
 
-This integration is licensed under GPL-3.0-or-later. See [`LICENSE`](LICENSE).
-
-The included Endurain logos and icons are **not** covered by this repository's GPL license. They are upstream Endurain brand assets and remain the property of the Endurain project. See [`NOTICE.md`](NOTICE.md).
+[GPL-3.0-or-later](LICENSE). The included Endurain logos and icons are upstream
+brand assets, not covered by this license; see [NOTICE](NOTICE.md).
