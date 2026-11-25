@@ -25,6 +25,7 @@ from .const import (
     DEFAULT_ENABLE_LIFETIME,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    RETRY_INTERVALS,
 )
 from .exceptions import (
     EndurainApiError,
@@ -50,14 +51,38 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.entry = entry
         self.client = client
         scan_interval = int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+        self._normal_interval = timedelta(seconds=scan_interval)
+        self._failures = 0
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=scan_interval),
+            update_interval=self._normal_interval,
         )
 
+    def _set_retry_interval(self, retry_after: int | None = None) -> None:
+        """Poll sooner after a failure, backing off up to RETRY_INTERVALS[-1]."""
+        delay = RETRY_INTERVALS[min(self._failures, len(RETRY_INTERVALS) - 1)]
+        self._failures += 1
+        if retry_after:
+            delay = max(delay, retry_after)
+        self.update_interval = min(timedelta(seconds=delay), self._normal_interval)
+
     async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch data, retrying quickly after transient failures."""
+        try:
+            data = await self._async_fetch_data()
+        except UpdateFailed as err:
+            self._set_retry_interval(getattr(err.__cause__, "retry_after", None))
+            raise
+        except TimeoutError as err:
+            self._set_retry_interval()
+            raise UpdateFailed("Timed out talking to Endurain") from err
+        self._failures = 0
+        self.update_interval = self._normal_interval
+        return data
+
+    async def _async_fetch_data(self) -> dict[str, Any]:
         """Fetch the latest data from Endurain."""
         include_goals = self.entry.options.get(CONF_ENABLE_GOALS, DEFAULT_ENABLE_GOALS)
         include_health = self.entry.options.get(CONF_ENABLE_HEALTH, DEFAULT_ENABLE_HEALTH)

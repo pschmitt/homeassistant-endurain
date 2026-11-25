@@ -38,3 +38,8 @@ ATTR_TOTAL_DURATION_HOURS = "total_duration_hours"
 ATTR_TOTAL_ELEVATION_GAIN_M = "total_elevation_gain_m"
 ATTR_BREAKDOWN = "breakdown"
 ATTR_TYPE_BREAKDOWN = "type_breakdown"
+
+# Retry delays (seconds) after a failed refresh, so a temporary outage (for
+# example the Endurain host rebooting) recovers quickly instead of waiting for
+# the regular scan interval. The last value is reused once exhausted.
+RETRY_INTERVALS = (30, 60, 120, 300)

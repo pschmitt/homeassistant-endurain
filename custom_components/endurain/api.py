@@ -105,6 +105,12 @@ class EndurainApiClient:
                     retry_after=retry_after,
                 )
 
+            if response.status >= 500:
+                raise EndurainApiError(
+                    self._extract_error_message(
+                        body, f"Login failed: server error {response.status}"
+                    )
+                )
             if response.status < 200 or response.status >= 300:
                 raise EndurainAuthError(self._extract_error_message(body, "Login failed"))
 
@@ -407,7 +413,7 @@ class EndurainApiClient:
                 headers=request_headers,
                 timeout=aiohttp.ClientTimeout(total=30),
             )
-        except aiohttp.ClientError as err:
+        except (aiohttp.ClientError, TimeoutError) as err:
             raise EndurainApiError(f"Request failed: {err}") from err
 
         if auth and retry_on_auth and response.status == 401:
@@ -425,7 +431,7 @@ class EndurainApiClient:
                     headers=request_headers,
                     timeout=aiohttp.ClientTimeout(total=30),
                 )
-            except aiohttp.ClientError as err:
+            except (aiohttp.ClientError, TimeoutError) as err:
                 raise EndurainApiError(f"Request failed: {err}") from err
 
         return response
