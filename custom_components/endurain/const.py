@@ -8,14 +8,9 @@ DOMAIN = "endurain"
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON, Platform.EVENT, Platform.CAMERA]
 
-CONF_MFA_CODE = "mfa_code"
-CONF_DEVICE_ID = "device_id"
-CONF_API_KEY_ID = "api_key_id"
 CONF_API_KEY_EXPIRES_AT = "api_key_expires_at"
 
-#: Name of the API key the integration creates in Endurain.
-API_KEY_NAME = "Home Assistant"
-#: Ask for a new key this long before the current one expires.
+#: Ask for a new key this long before the current one expires (when its expiry is known).
 API_KEY_RENEW_BEFORE_DAYS = 14
 CONF_ENABLE_GEARS = "enable_gears"
 CONF_ENABLE_GOALS = "enable_goals"

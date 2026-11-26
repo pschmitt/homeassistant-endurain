@@ -6,29 +6,24 @@ import hashlib
 import logging
 from pathlib import Path
 
-from aiohttp import ClientSession
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_API_KEY,
-    CONF_PASSWORD,
     CONF_URL,
-    CONF_USERNAME,
     CONF_VERIFY_SSL,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.typing import ConfigType
 
-from .api import EndurainAccountSession, EndurainApiClient
-from .const import CONF_DEVICE_ID, CONF_MFA_CODE, DOMAIN, PLATFORMS
+from .api import EndurainApiClient
+from .const import DOMAIN, PLATFORMS
 from .coordinator import EndurainCoordinator
-from .exceptions import EndurainApiError, EndurainAuthError, EndurainMfaRequiredError
-from .provision import async_create_key_data
 from .services import async_register_services, async_unregister_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -90,7 +85,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         verify_ssl=entry.data[CONF_VERIFY_SSL],
     )
     if not entry.data.get(CONF_API_KEY):
-        await _async_migrate_to_api_key(hass, entry, session)
+        # Entries from before API keys stored a username and password.
+        raise ConfigEntryAuthFailed("Endurain now needs an API key; reauthenticate to add one")
     client = EndurainApiClient(
         session=session,
         base_url=entry.data[CONF_URL],
@@ -112,40 +108,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "endurain_initial_refresh",
     )
     return True
-
-
-async def _async_migrate_to_api_key(
-    hass: HomeAssistant, entry: ConfigEntry, session: ClientSession
-) -> None:
-    """Replace the stored password of an entry from before API keys with a new key.
-
-    Signs in once with the stored credentials, creates an API key and drops the
-    password. An account with MFA cannot be migrated unattended: it goes to reauth.
-    """
-    if not entry.data.get(CONF_PASSWORD):
-        raise ConfigEntryAuthFailed("No Endurain API key configured")
-    account = EndurainAccountSession(
-        session=session,
-        base_url=entry.data[CONF_URL],
-        device_id=entry.data.get(CONF_DEVICE_ID),
-    )
-    try:
-        await account.async_login(entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD])
-        key_data = await async_create_key_data(account, password=entry.data[CONF_PASSWORD])
-    except EndurainMfaRequiredError as err:
-        raise ConfigEntryAuthFailed(
-            "Endurain needs an API key; reauthenticate to create one with your MFA code"
-        ) from err
-    except EndurainAuthError as err:
-        raise ConfigEntryAuthFailed(str(err)) from err
-    except EndurainApiError as err:
-        raise ConfigEntryNotReady(str(err)) from err
-
-    data = {
-        key: value for key, value in entry.data.items() if key not in (CONF_PASSWORD, CONF_MFA_CODE)
-    }
-    hass.config_entries.async_update_entry(entry, data={**data, **key_data})
-    _LOGGER.info("Replaced the stored Endurain password with an API key")
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

@@ -33,7 +33,6 @@ from .const import (
 from .exceptions import (
     EndurainApiError,
     EndurainAuthError,
-    EndurainMfaRequiredError,
     EndurainRateLimitError,
 )
 from .repairs import async_create_auth_issue, async_delete_auth_issue
@@ -226,7 +225,7 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "latest_weight": latest_weight,
                 "gear_stats": gear_stats,
             }
-        except (EndurainAuthError, EndurainMfaRequiredError) as err:
+        except EndurainAuthError as err:
             async_create_auth_issue(self.hass, self.entry, str(err))
             raise ConfigEntryAuthFailed(str(err)) from err
         except EndurainRateLimitError as err:

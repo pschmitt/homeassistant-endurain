@@ -27,24 +27,21 @@ The badge does not imply a public catalog listing.
 
 ## Quick start
 
-1. Go to **Settings → Devices & services → Add integration** and select **Endurain**.
-2. Enter your [Endurain](https://github.com/endurain-project/endurain) server URL
-   and an API key (Endurain: **Settings → Security → API keys**). Or leave the
-   key empty and sign in once with your username and password: the integration
-   then creates a key named "Home Assistant" and does not store your password.
-3. Open the Endurain device to inspect distance, notifications, goals and gear.
+1. In Endurain, create an API key under **Settings → Security → API keys** with
+   the scopes `account`, `activities:read`, `activities:write`, `gears:read`,
+   `gears:write`, `health:read` and `notifications:read`.
+2. Go to **Settings → Devices & services → Add integration** and select **Endurain**.
+3. Enter your [Endurain](https://github.com/endurain-project/endurain) server URL
+   and the API key.
+4. Open the Endurain device to inspect distance, notifications, goals and gear.
 
-The integration requires Endurain v0.21 or later and authenticates with an API
-key. A key the integration creates holds the scopes `account`, `activities:read`,
-`activities:write`, `gears:read`, `gears:write`, `health:read` and
-`notifications:read`; a key you create needs the same for every sensor and
-action to work. Endurain API keys expire (365 days by default). Two weeks
-before the key the integration created expires, Home Assistant asks you to
-reauthenticate; signing in there creates a new key and revokes the old one.
+The integration requires Endurain v0.21 or later and authenticates only with
+an API key. Endurain API keys expire (365 days by default): when the key stops
+working, Home Assistant asks you to reauthenticate with a new one. Revoke the
+old key in Endurain afterwards.
 
-Entries set up with a username and password before this version switch to an
-API key on their own at the next start, unless the account uses MFA: those ask
-to reauthenticate.
+Entries set up with a username and password before API keys ask to
+reauthenticate with a key.
 
 Strava import actions take `file_path` for the matching CSV from a Strava
 export.

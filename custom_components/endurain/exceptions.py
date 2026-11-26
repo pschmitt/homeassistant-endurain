@@ -11,10 +11,6 @@ class EndurainAuthError(EndurainApiError):
     """Raised when authentication fails."""
 
 
-class EndurainMfaRequiredError(EndurainAuthError):
-    """Raised when MFA is required."""
-
-
 class EndurainRateLimitError(EndurainApiError):
     """Raised when the Endurain API rate-limits the client."""
 
