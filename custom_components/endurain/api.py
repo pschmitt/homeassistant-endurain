@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import json
+import secrets
 from collections.abc import Callable, Mapping
 from datetime import date, timedelta
 from pathlib import Path
@@ -30,6 +33,8 @@ class EndurainApiClient:
         username: str,
         password: str,
         mfa_code: str | None = None,
+        device_id: str | None = None,
+        on_device_id: Callable[[str], None] | None = None,
     ) -> None:
         """Initialize the client."""
         self._session = session
@@ -37,6 +42,8 @@ class EndurainApiClient:
         self._username = username
         self._password = password
         self._mfa_code = mfa_code
+        self._device_id = device_id
+        self._on_device_id = on_device_id
         self._access_token: str | None = None
         self._auth_lock = asyncio.Lock()
         self._login_retry_at: float = 0.0
@@ -83,70 +90,126 @@ class EndurainApiClient:
             if delay > 0:
                 await asyncio.sleep(delay)
 
-            payload = {"username": self._username, "password": self._password}
+            code_verifier = secrets.token_urlsafe(64)
+            code_challenge = (
+                base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
+                .rstrip(b"=")
+                .decode()
+            )
+            payload = {
+                "username": self._username,
+                "password": self._password,
+                "code_challenge": code_challenge,
+                "code_challenge_method": "S256",
+            }
             response = await self._raw_request(
                 "post",
                 "/api/v1/auth/login",
                 headers={
                     "Content-Type": "application/x-www-form-urlencoded",
-                    "X-Client-Type": "mobile",
+                    **self._auth_headers(),
                 },
                 data=payload,
                 auth=False,
                 retry_on_auth=False,
             )
-            body = await self._decode_response(response)
+            body = await self._decode_auth_response(response, "Login failed", loop)
 
-            if response.status == 429:
-                retry_after = self._extract_retry_after(body) or 60
-                self._login_retry_at = loop.time() + retry_after
-                raise EndurainRateLimitError(
-                    self._extract_error_message(body, "Rate limit exceeded"),
-                    retry_after=retry_after,
-                )
-
-            if response.status >= 500:
-                raise EndurainApiError(
-                    self._extract_error_message(
-                        body, f"Login failed: server error {response.status}"
-                    )
-                )
-            if response.status < 200 or response.status >= 300:
-                raise EndurainAuthError(self._extract_error_message(body, "Login failed"))
-
-            if isinstance(body, Mapping) and body.get("mfa_required"):
+            if body.get("next_step") == "mfa":
                 code = mfa_code or self._mfa_code
                 if not code:
                     raise EndurainMfaRequiredError("MFA is required")
-                body = await self.async_verify_mfa(code)
+                body = await self.async_verify_mfa(str(body.get("mfa_challenge") or ""), code)
 
-            if not isinstance(body, Mapping) or not body.get("access_token"):
+            if body.get("next_step") == "password_change":
+                raise EndurainAuthError(
+                    "Endurain requires a password change; sign in to Endurain and change it"
+                )
+
+            if body.get("next_step") == "exchange":
+                self._store_device_id(body.get("device_id"))
+                session_id = body.get("session_id")
+                if not session_id:
+                    raise EndurainAuthError("Login response missing session id")
+                response = await self._raw_request(
+                    "post",
+                    f"/api/v1/auth/sessions/{session_id}/tokens",
+                    headers={"Content-Type": "application/json", **self._auth_headers()},
+                    json_data={"code_verifier": code_verifier},
+                    auth=False,
+                    retry_on_auth=False,
+                )
+                body = await self._decode_auth_response(response, "Token exchange failed", loop)
+
+            if body.get("next_step") != "tokens":
+                raise EndurainAuthError(
+                    f"Unsupported Endurain sign-in step: {body.get('next_step')}"
+                )
+            if not body.get("access_token"):
                 raise EndurainAuthError("Login response missing access token")
 
+            self._store_device_id(body.get("device_id"))
             self._login_retry_at = 0.0
             self._access_token = str(body["access_token"])
             return self._access_token
 
-    async def async_verify_mfa(self, code: str) -> dict[str, Any]:
-        """Complete MFA verification."""
+    def _auth_headers(self) -> dict[str, str]:
+        """Return the headers every mobile /auth/ request carries."""
+        headers = {"X-Client-Type": "mobile"}
+        if self._device_id:
+            headers["X-Device-Id"] = self._device_id
+        return headers
+
+    def _store_device_id(self, device_id: Any) -> None:
+        """Remember the device id so later sign-ins are not reported as new devices."""
+        if not isinstance(device_id, str) or not device_id or device_id == self._device_id:
+            return
+        self._device_id = device_id
+        if self._on_device_id is not None:
+            self._on_device_id(device_id)
+
+    async def _decode_auth_response(
+        self,
+        response: aiohttp.ClientResponse,
+        default_error: str,
+        loop: asyncio.AbstractEventLoop,
+    ) -> dict[str, Any]:
+        """Decode a sign-in step answer, mapping failures to integration errors."""
+        body = await self._decode_response(response)
+        if response.status == 429:
+            retry_after = self._extract_retry_after(body) or 60
+            self._login_retry_at = loop.time() + retry_after
+            raise EndurainRateLimitError(
+                self._extract_error_message(body, "Rate limit exceeded"),
+                retry_after=retry_after,
+            )
+        if response.status >= 500:
+            raise EndurainApiError(
+                self._extract_error_message(
+                    body, f"{default_error}: server error {response.status}"
+                )
+            )
+        if response.status < 200 or response.status >= 300:
+            raise EndurainAuthError(self._extract_error_message(body, default_error))
+        if not isinstance(body, Mapping):
+            raise EndurainAuthError(f"{default_error}: response was not JSON")
+        return dict(body)
+
+    async def async_verify_mfa(self, mfa_challenge: str, code: str) -> dict[str, Any]:
+        """Answer the MFA step of a sign-in."""
         response = await self._raw_request(
             "post",
             "/api/v1/auth/mfa/verify",
-            headers={
-                "Content-Type": "application/json",
-                "X-Client-Type": "mobile",
-            },
-            json_data={"username": self._username, "mfa_code": code},
+            headers={"Content-Type": "application/json", **self._auth_headers()},
+            json_data={"mfa_challenge": mfa_challenge, "mfa_code": code},
             auth=False,
             retry_on_auth=False,
         )
-        body = await self._decode_response(response)
-        if response.status < 200 or response.status >= 300:
-            raise EndurainAuthError(self._extract_error_message(body, "MFA verification failed"))
-        if not isinstance(body, Mapping):
-            raise EndurainAuthError("MFA verification response was not JSON")
+        body = await self._decode_auth_response(
+            response, "MFA verification failed", asyncio.get_running_loop()
+        )
         self._mfa_code = code
-        return dict(body)
+        return body
 
     async def async_fetch_about(self) -> dict[str, Any]:
         """Fetch API metadata."""
@@ -175,40 +238,35 @@ class EndurainApiClient:
 
     async def async_fetch_goals_progress(self) -> list[dict[str, Any]]:
         """Fetch goal progress."""
-        data = await self._request_json("get", "/api/v1/profile/goals/results")
-        if data is None:
-            return []
-        if not isinstance(data, list):
-            raise EndurainApiError("Unexpected goals payload")
-        return [dict(item) for item in data if isinstance(item, Mapping)]
+        return await self._fetch_all_pages("/api/v1/profile/goals/results", page_size=100)
 
-    async def async_fetch_latest_activity(self, user_id: int) -> dict[str, Any] | None:
+    async def async_fetch_latest_activity(self, user_id: str) -> dict[str, Any] | None:
         """Fetch the most recent activity for the configured user."""
         activities = await self._fetch_all_pages(
-            f"/api/v1/activities/users/{user_id}",
+            f"/api/v1/users/{user_id}/activities",
             page_size=1,
             limit=1,
         )
         return activities[0] if activities else None
 
     async def async_fetch_recent_activities(
-        self, user_id: int, num_records: int = 400
+        self, user_id: str, num_records: int = 400
     ) -> list[dict[str, Any]]:
         """Fetch the most recent activities for the configured user."""
         return await self._fetch_all_pages(
-            f"/api/v1/activities/users/{user_id}",
+            f"/api/v1/users/{user_id}/activities",
             page_size=200,
             limit=num_records,
         )
 
-    async def async_fetch_activity_streams(self, activity_id: int) -> list[dict[str, Any]]:
+    async def async_fetch_activity_streams(self, activity_id: str) -> list[dict[str, Any]]:
         """Fetch all activity streams for the given activity."""
         return await self._fetch_all_pages(
             f"/api/v1/activities/{activity_id}/streams",
             page_size=200,
         )
 
-    async def async_fetch_activity_laps(self, activity_id: int) -> list[dict[str, Any]]:
+    async def async_fetch_activity_laps(self, activity_id: str) -> list[dict[str, Any]]:
         """Fetch all laps for the given activity."""
         return await self._fetch_all_pages(
             f"/api/v1/activities/{activity_id}/laps",
@@ -217,9 +275,9 @@ class EndurainApiClient:
 
     async def async_fetch_notifications_number(self) -> int:
         """Fetch the unread notifications count."""
-        data = await self._request_json("get", "/api/v1/notifications/number")
-        if isinstance(data, int):
-            return data
+        data = await self._request_json("get", "/api/v1/notifications/unread-count")
+        if isinstance(data, Mapping) and isinstance(data.get("count"), int):
+            return data["count"]
         raise EndurainApiError("Unexpected notifications payload")
 
     async def async_fetch_health_steps(self) -> dict[str, Any] | None:
@@ -243,7 +301,7 @@ class EndurainApiClient:
         if gears is None:
             return []
         if isinstance(gears, Mapping):
-            gears = gears.get("records")
+            gears = gears.get("items")
         if not isinstance(gears, list):
             raise EndurainApiError("Unexpected gears payload")
 
@@ -256,8 +314,9 @@ class EndurainApiClient:
             activities: list[dict[str, Any]] = []
             if gear_id is not None:
                 activities = await self._fetch_all_pages(
-                    f"/api/v1/activities/gears/{gear_id}",
+                    "/api/v1/activities",
                     page_size=200,
+                    params={"gear_id": gear_id},
                 )
             enriched.append(self._build_gear_stats(gear_dict, activities))
         return enriched
@@ -267,7 +326,7 @@ class EndurainApiClient:
         start_date = date.today() - timedelta(days=days)
         end_date = date.today()
         await self._request_json(
-            "get",
+            "post",
             "/api/v1/strava/activities",
             params={
                 "start_date": start_date.isoformat(),
@@ -277,7 +336,7 @@ class EndurainApiClient:
 
     async def async_sync_strava_gear(self) -> None:
         """Trigger a Strava gear sync."""
-        await self._request_json("get", "/api/v1/strava/gear")
+        await self._request_json("post", "/api/v1/strava/gear")
 
     async def async_refresh_activities(self) -> None:
         """Trigger an activity refresh."""
@@ -293,6 +352,7 @@ class EndurainApiClient:
         *,
         page_size: int,
         limit: int | None = None,
+        params: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch every page from an Endurain paginated endpoint."""
         records: list[dict[str, Any]] = []
@@ -301,7 +361,7 @@ class EndurainApiClient:
             data = await self._request_json(
                 "get",
                 path,
-                params={"page_number": page_number, "num_records": page_size},
+                params={**(params or {}), "page_number": page_number, "num_records": page_size},
             )
             if not isinstance(data, Mapping):
                 raise EndurainApiError("Unexpected paginated response")
@@ -321,13 +381,13 @@ class EndurainApiClient:
 
     async def async_import_strava_shoes(self, file_path: str) -> None:
         """Import shoes from Strava export data."""
-        await self._async_import_strava_csv("/api/v1/strava/import/shoes", file_path)
+        await self._async_import_strava_csv("shoes", file_path)
 
     async def async_import_strava_bikes(self, file_path: str) -> None:
         """Import bikes from Strava export data."""
-        await self._async_import_strava_csv("/api/v1/strava/import/bikes", file_path)
+        await self._async_import_strava_csv("bike", file_path)
 
-    async def _async_import_strava_csv(self, endpoint: str, file_path: str) -> None:
+    async def _async_import_strava_csv(self, gear_type: str, file_path: str) -> None:
         """Upload a Strava export CSV to Endurain."""
         path = Path(file_path)
         try:
@@ -337,7 +397,8 @@ class EndurainApiClient:
 
         await self._request_json(
             "post",
-            endpoint,
+            "/api/v1/strava/import/gear",
+            params={"gear_type": gear_type},
             data_factory=lambda: self._strava_csv_form(contents, path.name),
         )
 
@@ -482,7 +543,7 @@ class EndurainApiClient:
         """Return the most recent record from a paginated list payload."""
         if not isinstance(payload, Mapping):
             raise EndurainApiError("Unexpected list payload")
-        records = payload.get("records")
+        records = payload.get("items")
         if not isinstance(records, list) or not records:
             return None
 

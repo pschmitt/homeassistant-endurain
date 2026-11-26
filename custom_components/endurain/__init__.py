@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from pathlib import Path
+from typing import Any
 
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
@@ -17,7 +18,7 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.typing import ConfigType
 
 from .api import EndurainApiClient
-from .const import CONF_MFA_CODE, DOMAIN, PLATFORMS
+from .const import CONF_DEVICE_ID, CONF_MFA_CODE, DOMAIN, PLATFORMS
 from .coordinator import EndurainCoordinator
 from .services import async_register_services, async_unregister_services
 
@@ -85,12 +86,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         username=entry.data[CONF_USERNAME],
         password=entry.data[CONF_PASSWORD],
         mfa_code=entry.data.get(CONF_MFA_CODE),
+        device_id=entry.data.get(CONF_DEVICE_ID),
+        on_device_id=lambda device_id: hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_DEVICE_ID: device_id}
+        ),
     )
     coordinator = EndurainCoordinator(hass, entry, client)
 
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
         "coordinator": coordinator,
+        "reload_state": _reload_relevant_state(entry),
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -114,6 +120,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
+def _reload_relevant_state(entry: ConfigEntry) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Return the entry state whose change needs a reload (not the stored device id)."""
+    data = {key: value for key, value in entry.data.items() if key != CONF_DEVICE_ID}
+    return data, dict(entry.options)
+
+
 async def async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload the integration after options changes."""
+    """Reload the integration after options or credential changes."""
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    state = _reload_relevant_state(entry)
+    if runtime is not None and runtime.get("reload_state") == state:
+        return
     await hass.config_entries.async_reload(entry.entry_id)

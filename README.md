@@ -32,9 +32,10 @@ The badge does not imply a public catalog listing.
    and account details.
 3. Open the Endurain device to inspect distance, notifications, goals and gear.
 
-The integration also supports Endurain v0.20 paginated activities and background
-refresh jobs. Strava import actions take `file_path` for the matching CSV from
-a Strava export.
+The integration requires Endurain v0.21 or later. It signs in as a mobile
+client with PKCE and remembers the device id Endurain returns, so repeated
+sign-ins do not trigger new-device notices. Strava import actions take
+`file_path` for the matching CSV from a Strava export.
 
 ## License
 

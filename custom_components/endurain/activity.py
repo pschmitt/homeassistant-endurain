@@ -5,24 +5,18 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-ACTIVITY_TYPE_NAMES: dict[int, str] = {
-    1: "Run",
-    2: "Bike",
-    3: "Swim",
-    4: "Strength",
-    5: "Cardio",
-    6: "Hike",
-    7: "Rowing",
-    8: "Snow Ski",
-    9: "Snowboard",
-    10: "Windsurf",
-    11: "Walk",
-    12: "Stand Up Paddleboarding",
-    13: "Surfing",
-    14: "Kayaking",
-    15: "Sailing",
-    16: "Snowshoeing",
-    17: "Inline Skating",
+# Endurain v0.21+ sends activity types as string keys (see GET /activities/types).
+ACTIVITY_TYPE_NAMES: dict[str, str] = {
+    "run": "Run",
+    "ride": "Ride",
+    "swim": "Swim",
+    "walk": "Walk",
+    "hike": "Hike",
+    "workout": "Workout",
+    "snow_shoeing": "Snowshoeing",
+    "stand_up_paddling": "Stand Up Paddling",
+    "surf": "Surfing",
+    "other": "Other",
 }
 
 
@@ -35,8 +29,8 @@ def activity_name(activity: Mapping[str, Any]) -> str | None:
 def activity_type_name(activity: Mapping[str, Any]) -> str | None:
     """Return the normalized activity type name."""
     activity_type = activity.get("activity_type")
-    if isinstance(activity_type, int):
-        return ACTIVITY_TYPE_NAMES.get(activity_type, f"Type {activity_type}")
+    if isinstance(activity_type, str) and activity_type:
+        return ACTIVITY_TYPE_NAMES.get(activity_type, activity_type.replace("_", " ").title())
     return None
 
 
@@ -65,7 +59,7 @@ def activity_distance_km(activity: Mapping[str, Any]) -> float | None:
 def activity_url(base_url: str, activity: Mapping[str, Any]) -> str | None:
     """Return the frontend URL for an activity."""
     activity_id = activity.get("id")
-    if not isinstance(activity_id, int):
+    if not isinstance(activity_id, str) or not activity_id:
         return None
     return f"{base_url.rstrip('/')}/activity/{activity_id}"
 

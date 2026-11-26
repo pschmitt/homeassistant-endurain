@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,6 +15,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfMass
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify
 
@@ -107,6 +109,18 @@ async def async_setup_entry(
     async_add_entities(static_entities)
 
     known_dynamic_ids: set[str] = set()
+    registry = er.async_get(hass)
+
+    @callback
+    def async_migrate_legacy_unique_id(kind: str, unique_id: str, entity: SensorEntity) -> None:
+        """Keep entities created before Endurain v0.21 replaced integer ids with UUIDs."""
+        if registry.async_get_entity_id("sensor", DOMAIN, unique_id):
+            return
+        legacy = re.compile(rf"^{re.escape(entry.entry_id)}_{kind}_\d+$")
+        for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+            if legacy.match(reg_entry.unique_id) and reg_entry.original_name == entity.name:
+                registry.async_update_entity(reg_entry.entity_id, new_unique_id=unique_id)
+                return
 
     @callback
     def async_add_dynamic_entities() -> None:
@@ -123,7 +137,9 @@ async def async_setup_entry(
             if unique_id in known_dynamic_ids:
                 continue
             known_dynamic_ids.add(unique_id)
-            new_entities.append(EndurainGoalSensor(coordinator, entry, goal_id))
+            goal_entity = EndurainGoalSensor(coordinator, entry, goal_id)
+            async_migrate_legacy_unique_id("goal", unique_id, goal_entity)
+            new_entities.append(goal_entity)
 
         for gear in data.get("gear_stats", []):
             gear_id = gear.get("id")
@@ -135,7 +151,9 @@ async def async_setup_entry(
             if unique_id in known_dynamic_ids:
                 continue
             known_dynamic_ids.add(unique_id)
-            new_entities.append(EndurainGearSensor(coordinator, entry, unique_suffix))
+            gear_entity = EndurainGearSensor(coordinator, entry, unique_suffix)
+            async_migrate_legacy_unique_id("gear", unique_id, gear_entity)
+            new_entities.append(gear_entity)
 
         known_dynamic_ids.intersection_update(current_ids)
 
@@ -440,7 +458,7 @@ class EndurainWeightSensor(EndurainEntity, SensorEntity):
         record = self._record
         if record is None:
             return None
-        value = record.get("weight")
+        value = record.get("weight_kg", record.get("weight"))
         return round(float(value), 2) if isinstance(value, int | float) else None
 
     @property
@@ -490,7 +508,7 @@ class EndurainGoalSensor(EndurainEntity, SensorEntity):
     _attr_icon = "mdi:flag-checkered"
     _attr_native_unit_of_measurement = PERCENTAGE
 
-    def __init__(self, coordinator: EndurainCoordinator, entry: ConfigEntry, goal_id: int) -> None:
+    def __init__(self, coordinator: EndurainCoordinator, entry: ConfigEntry, goal_id: str) -> None:
         """Initialize the goal sensor."""
         super().__init__(coordinator, entry)
         self._goal_id = goal_id

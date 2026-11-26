@@ -9,6 +9,7 @@ DOMAIN = "endurain"
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BUTTON, Platform.EVENT, Platform.CAMERA]
 
 CONF_MFA_CODE = "mfa_code"
+CONF_DEVICE_ID = "device_id"
 CONF_ENABLE_GEARS = "enable_gears"
 CONF_ENABLE_GOALS = "enable_goals"
 CONF_ENABLE_HEALTH = "enable_health"

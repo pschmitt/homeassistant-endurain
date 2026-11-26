@@ -41,7 +41,7 @@ class EndurainWorkoutUploadedEvent(EndurainEntity, EventEntity):
         """Register the coordinator listener."""
         await super().async_added_to_hass()
         current = self._latest_activity
-        if current is not None and isinstance(current.get("id"), int):
+        if current is not None and isinstance(current.get("id"), str):
             self._last_activity_id = current["id"]
         self.async_on_remove(self.coordinator.async_add_listener(self._handle_coordinator_update))
 
@@ -54,7 +54,7 @@ class EndurainWorkoutUploadedEvent(EndurainEntity, EventEntity):
             return
 
         activity_id = activity.get("id")
-        if not isinstance(activity_id, int):
+        if not isinstance(activity_id, str) or not activity_id:
             self.async_write_ha_state()
             return
 

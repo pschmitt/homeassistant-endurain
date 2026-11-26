@@ -120,7 +120,7 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             latest_activity_streams: list[dict[str, Any]] = []
             latest_activity_laps: list[dict[str, Any]] = []
             user_id = profile.get("id")
-            if isinstance(user_id, int):
+            if isinstance(user_id, str) and user_id:
                 latest_activity = await self.client.async_fetch_latest_activity(user_id)
                 try:
                     recent_activities = await self.client.async_fetch_recent_activities(user_id)
@@ -129,7 +129,7 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 activity_id = (
                     latest_activity.get("id") if isinstance(latest_activity, dict) else None
                 )
-                if isinstance(activity_id, int):
+                if isinstance(activity_id, str) and activity_id:
                     try:
                         latest_activity_streams = await self.client.async_fetch_activity_streams(
                             activity_id
