@@ -3,44 +3,80 @@
     "step": {
       "user": {
         "title": "Connect to Endurain",
-        "description": "Configure access to your Endurain server.",
+        "description": "Connect with an Endurain API key, or leave the key empty to sign in once and let Home Assistant create one.",
         "data": {
           "url": "Endurain URL",
-          "username": "Username",
-          "password": "Password",
-          "mfa_code": "MFA code",
+          "api_key": "API key",
           "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "url": "Address of your Endurain server.",
+          "api_key": "An Endurain API key (Settings → Security → API keys). Leave empty to sign in with your username and password instead; the integration then creates a key and does not store your password."
+        }
+      },
+      "credentials": {
+        "title": "Sign in to Endurain",
+        "description": "Sign in once to create an API key named \"Home Assistant\". Your password is used only for this and is not stored.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "mfa": {
+        "title": "Two-step verification",
+        "description": "Enter the current code from your authenticator app.",
+        "data": {
+          "mfa_code": "MFA code"
+        }
+      },
+      "step_up": {
+        "title": "Confirm the API key",
+        "description": "Endurain accepts each code once. Wait for your authenticator app to show the next code and enter it to confirm creating the API key.",
+        "data": {
+          "mfa_code": "Next MFA code"
         }
       },
       "reconfigure": {
         "title": "Reconfigure Endurain",
-        "description": "Update the Endurain connection details.",
+        "description": "Change the server or replace the API key. Leave the key empty to keep the current one.",
         "data": {
           "url": "Endurain URL",
-          "username": "Username",
-          "password": "Password",
-          "mfa_code": "MFA code",
+          "api_key": "API key",
           "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "url": "Address of your Endurain server.",
+          "api_key": "A new Endurain API key. Leave empty to keep the current one."
         }
       },
       "reauth_confirm": {
-        "title": "Reauthenticate Endurain",
-        "description": "Update the password or MFA code for this Endurain account.",
+        "title": "Renew the Endurain API key",
+        "description": "The API key for {name} no longer works or expires soon. Enter a new key, or leave it empty to sign in and create one.",
         "data": {
-          "password": "Password",
-          "mfa_code": "MFA code"
+          "url": "Endurain URL",
+          "api_key": "API key",
+          "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "url": "Address of your Endurain server.",
+          "api_key": "An Endurain API key (Settings → Security → API keys). Leave empty to sign in with your username and password instead; the integration then creates a key and does not store your password."
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to Endurain.",
       "invalid_auth": "Authentication failed.",
-      "mfa_required": "MFA is required. Provide a current MFA code.",
-      "rate_limited": "Endurain is rate-limiting login attempts. Try again shortly.",
+      "invalid_mfa": "The MFA code was not accepted. Enter the next code.",
+      "mfa_required": "An MFA code is required.",
+      "rate_limited": "Endurain is rate-limiting requests. Try again shortly.",
       "unknown": "Unexpected error."
     },
     "abort": {
-      "already_configured": "This Endurain account is already configured."
+      "already_configured": "This Endurain account is already configured.",
+      "reauth_successful": "The Endurain API key was updated.",
+      "reconfigure_successful": "Endurain was reconfigured.",
+      "wrong_account": "The API key belongs to a different Endurain account.",
+      "unknown": "Unexpected error."
     }
   },
   "options": {

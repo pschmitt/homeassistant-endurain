@@ -12,9 +12,12 @@ from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import EndurainApiClient
 from .const import (
+    API_KEY_RENEW_BEFORE_DAYS,
+    CONF_API_KEY_EXPIRES_AT,
     CONF_ENABLE_GEARS,
     CONF_ENABLE_GOALS,
     CONF_ENABLE_HEALTH,
@@ -53,6 +56,7 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         scan_interval = int(entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
         self._normal_interval = timedelta(seconds=scan_interval)
         self._failures = 0
+        self._renewal_requested = False
         super().__init__(
             hass,
             _LOGGER,
@@ -80,7 +84,25 @@ class EndurainCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed("Timed out talking to Endurain") from err
         self._failures = 0
         self.update_interval = self._normal_interval
+        self._check_api_key_expiry()
         return data
+
+    def _check_api_key_expiry(self) -> None:
+        """Ask for a new API key shortly before the current one expires.
+
+        The reauth flow runs while the integration keeps working on the old key.
+        """
+        expires_at = dt_util.parse_datetime(str(self.entry.data.get(CONF_API_KEY_EXPIRES_AT) or ""))
+        if expires_at is None:
+            return
+        remaining = expires_at - dt_util.utcnow()
+        if not self._renewal_requested and remaining <= timedelta(days=API_KEY_RENEW_BEFORE_DAYS):
+            self._renewal_requested = True
+            _LOGGER.warning(
+                "The Endurain API key expires on %s; reauthenticate to renew it",
+                expires_at.isoformat(),
+            )
+            self.entry.async_start_reauth(self.hass)
 
     async def _async_fetch_data(self) -> dict[str, Any]:
         """Fetch the latest data from Endurain."""

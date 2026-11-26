@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD
+from homeassistant.const import CONF_API_KEY, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_MFA_CODE, DOMAIN
 
-TO_REDACT = {CONF_PASSWORD, CONF_MFA_CODE}
+TO_REDACT = {CONF_API_KEY, CONF_PASSWORD, CONF_MFA_CODE}
 
 
 async def async_get_config_entry_diagnostics(

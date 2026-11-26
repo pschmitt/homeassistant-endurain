@@ -1,4 +1,4 @@
-"""API client for Endurain."""
+"""API clients for Endurain."""
 
 from __future__ import annotations
 
@@ -21,195 +21,131 @@ from .exceptions import (
     EndurainRateLimitError,
 )
 
+#: Scopes of the API key the integration creates: reads for every sensor, writes for
+#: the refresh, bulk import and Strava sync and import actions.
+API_KEY_SCOPES: tuple[str, ...] = (
+    "account",
+    "activities:read",
+    "activities:write",
+    "gears:read",
+    "gears:write",
+    "health:read",
+    "notifications:read",
+)
 
-class EndurainApiClient:
-    """Async API client for Endurain."""
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
 
-    def __init__(
-        self,
-        *,
-        session: aiohttp.ClientSession,
-        base_url: str,
-        username: str,
-        password: str,
-        mfa_code: str | None = None,
-        device_id: str | None = None,
-        on_device_id: Callable[[str], None] | None = None,
-    ) -> None:
-        """Initialize the client."""
+
+class _EndurainHttp:
+    """Shared HTTP plumbing for the Endurain clients."""
+
+    def __init__(self, *, session: aiohttp.ClientSession, base_url: str) -> None:
+        """Initialize the HTTP helper."""
         self._session = session
         self._base_url = base_url.rstrip("/")
-        self._username = username
-        self._password = password
-        self._mfa_code = mfa_code
-        self._device_id = device_id
-        self._on_device_id = on_device_id
-        self._access_token: str | None = None
-        self._auth_lock = asyncio.Lock()
-        self._login_retry_at: float = 0.0
 
     @property
     def base_url(self) -> str:
         """Return the normalized base URL."""
         return self._base_url
 
-    @property
-    def username(self) -> str:
-        """Return the configured username."""
-        return self._username
-
-    def update_credentials(
+    async def _raw_request(
         self,
+        method: str,
+        path: str,
         *,
-        base_url: str,
-        username: str,
-        password: str,
-        mfa_code: str | None,
-    ) -> None:
-        """Update runtime credentials."""
-        self._base_url = base_url.rstrip("/")
-        self._username = username
-        self._password = password
-        self._mfa_code = mfa_code
-        self._access_token = None
-
-    async def async_validate(self, mfa_code: str | None = None) -> dict[str, Any]:
-        """Validate credentials and return basic profile metadata."""
-        await self.async_login(mfa_code=mfa_code)
-        about, profile = await self.async_fetch_about(), await self.async_fetch_profile()
-        return {"about": about, "profile": profile}
-
-    async def async_login(self, *, mfa_code: str | None = None) -> str:
-        """Authenticate against Endurain."""
-        async with self._auth_lock:
-            if self._access_token is not None:
-                return self._access_token
-
-            loop = asyncio.get_running_loop()
-            delay = self._login_retry_at - loop.time()
-            if delay > 0:
-                await asyncio.sleep(delay)
-
-            code_verifier = secrets.token_urlsafe(64)
-            code_challenge = (
-                base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
-                .rstrip(b"=")
-                .decode()
+        params: dict[str, Any] | None = None,
+        data: Any = None,
+        json_data: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> aiohttp.ClientResponse:
+        """Execute a raw request against the API."""
+        request_headers = {"Accept": "application/json", **(headers or {})}
+        try:
+            return await self._session.request(
+                method.upper(),
+                f"{self._base_url}{path}",
+                params=params,
+                data=data,
+                json=json_data,
+                headers=request_headers,
+                timeout=REQUEST_TIMEOUT,
             )
-            payload = {
-                "username": self._username,
-                "password": self._password,
-                "code_challenge": code_challenge,
-                "code_challenge_method": "S256",
-            }
-            response = await self._raw_request(
-                "post",
-                "/api/v1/auth/login",
-                headers={
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    **self._auth_headers(),
-                },
-                data=payload,
-                auth=False,
-                retry_on_auth=False,
-            )
-            body = await self._decode_auth_response(response, "Login failed", loop)
+        except (aiohttp.ClientError, TimeoutError) as err:
+            raise EndurainApiError(f"Request failed: {err}") from err
 
-            if body.get("next_step") == "mfa":
-                code = mfa_code or self._mfa_code
-                if not code:
-                    raise EndurainMfaRequiredError("MFA is required")
-                body = await self.async_verify_mfa(str(body.get("mfa_challenge") or ""), code)
-
-            if body.get("next_step") == "password_change":
-                raise EndurainAuthError(
-                    "Endurain requires a password change; sign in to Endurain and change it"
-                )
-
-            if body.get("next_step") == "exchange":
-                self._store_device_id(body.get("device_id"))
-                session_id = body.get("session_id")
-                if not session_id:
-                    raise EndurainAuthError("Login response missing session id")
-                response = await self._raw_request(
-                    "post",
-                    f"/api/v1/auth/sessions/{session_id}/tokens",
-                    headers={"Content-Type": "application/json", **self._auth_headers()},
-                    json_data={"code_verifier": code_verifier},
-                    auth=False,
-                    retry_on_auth=False,
-                )
-                body = await self._decode_auth_response(response, "Token exchange failed", loop)
-
-            if body.get("next_step") != "tokens":
-                raise EndurainAuthError(
-                    f"Unsupported Endurain sign-in step: {body.get('next_step')}"
-                )
-            if not body.get("access_token"):
-                raise EndurainAuthError("Login response missing access token")
-
-            self._store_device_id(body.get("device_id"))
-            self._login_retry_at = 0.0
-            self._access_token = str(body["access_token"])
-            return self._access_token
-
-    def _auth_headers(self) -> dict[str, str]:
-        """Return the headers every mobile /auth/ request carries."""
-        headers = {"X-Client-Type": "mobile"}
-        if self._device_id:
-            headers["X-Device-Id"] = self._device_id
-        return headers
-
-    def _store_device_id(self, device_id: Any) -> None:
-        """Remember the device id so later sign-ins are not reported as new devices."""
-        if not isinstance(device_id, str) or not device_id or device_id == self._device_id:
-            return
-        self._device_id = device_id
-        if self._on_device_id is not None:
-            self._on_device_id(device_id)
-
-    async def _decode_auth_response(
-        self,
-        response: aiohttp.ClientResponse,
-        default_error: str,
-        loop: asyncio.AbstractEventLoop,
-    ) -> dict[str, Any]:
-        """Decode a sign-in step answer, mapping failures to integration errors."""
+    async def _checked_json(self, response: aiohttp.ClientResponse, default_error: str) -> Any:
+        """Decode a response and map error statuses to integration errors."""
         body = await self._decode_response(response)
         if response.status == 429:
-            retry_after = self._extract_retry_after(body) or 60
-            self._login_retry_at = loop.time() + retry_after
             raise EndurainRateLimitError(
                 self._extract_error_message(body, "Rate limit exceeded"),
-                retry_after=retry_after,
+                retry_after=self._extract_retry_after(body, response),
             )
-        if response.status >= 500:
-            raise EndurainApiError(
-                self._extract_error_message(
-                    body, f"{default_error}: server error {response.status}"
-                )
-            )
+        if response.status == 401:
+            raise EndurainAuthError(self._extract_error_message(body, "Authentication failed"))
+        if response.status == 403:
+            raise EndurainAuthError(self._extract_error_message(body, "Permission denied"))
         if response.status < 200 or response.status >= 300:
-            raise EndurainAuthError(self._extract_error_message(body, default_error))
-        if not isinstance(body, Mapping):
-            raise EndurainAuthError(f"{default_error}: response was not JSON")
-        return dict(body)
-
-    async def async_verify_mfa(self, mfa_challenge: str, code: str) -> dict[str, Any]:
-        """Answer the MFA step of a sign-in."""
-        response = await self._raw_request(
-            "post",
-            "/api/v1/auth/mfa/verify",
-            headers={"Content-Type": "application/json", **self._auth_headers()},
-            json_data={"mfa_challenge": mfa_challenge, "mfa_code": code},
-            auth=False,
-            retry_on_auth=False,
-        )
-        body = await self._decode_auth_response(
-            response, "MFA verification failed", asyncio.get_running_loop()
-        )
-        self._mfa_code = code
+            raise EndurainApiError(self._extract_error_message(body, default_error))
         return body
+
+    async def _decode_response(self, response: aiohttp.ClientResponse) -> Any:
+        """Decode a response body."""
+        text = await response.text()
+        if not text:
+            return None
+        content_type = response.headers.get("Content-Type", "")
+        if "html" in content_type.lower() or "<!DOCTYPE html" in text or "<html" in text:
+            raise EndurainApiError("Unexpected HTML response from Endurain")
+        if "json" in content_type.lower():
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError as err:
+                raise EndurainApiError("Invalid JSON response from Endurain") from err
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return text
+
+    def _extract_error_message(self, body: Any, default: str) -> str:
+        """Extract an error message from an API response."""
+        if isinstance(body, Mapping):
+            detail = body.get("detail") or body.get("error") or body.get("message")
+            if detail:
+                return str(detail)
+        if isinstance(body, str) and body:
+            return body
+        return default
+
+    def _extract_retry_after(
+        self, body: Any, response: aiohttp.ClientResponse | None = None
+    ) -> int | None:
+        """Extract the retry delay from an API response."""
+        if isinstance(body, Mapping):
+            value = body.get("retry_after")
+            if isinstance(value, int):
+                return value
+        if response is not None:
+            header = response.headers.get("Retry-After", "")
+            if header.isdigit():
+                return int(header)
+        return None
+
+
+class EndurainApiClient(_EndurainHttp):
+    """Endurain data client, authenticated with an API key."""
+
+    def __init__(
+        self,
+        *,
+        session: aiohttp.ClientSession,
+        base_url: str,
+        api_key: str,
+    ) -> None:
+        """Initialize the client."""
+        super().__init__(session=session, base_url=base_url)
+        self._api_key = api_key
 
     async def async_fetch_about(self) -> dict[str, Any]:
         """Fetch API metadata."""
@@ -423,115 +359,10 @@ class EndurainApiClient:
             method,
             path,
             params=params,
-            data=data,
-            data_factory=data_factory,
-            auth=auth,
-            retry_on_auth=True,
+            data=data_factory() if data_factory else data,
+            headers={"X-API-Key": self._api_key} if auth else None,
         )
-        body = await self._decode_response(response)
-        if response.status == 429:
-            raise EndurainRateLimitError(
-                self._extract_error_message(body, "Rate limit exceeded"),
-                retry_after=self._extract_retry_after(body),
-            )
-        if response.status == 401:
-            raise EndurainAuthError("Authentication failed")
-        if response.status < 200 or response.status >= 300:
-            raise EndurainApiError(self._extract_error_message(body, f"Request failed: {path}"))
-        return body
-
-    async def _raw_request(
-        self,
-        method: str,
-        path: str,
-        *,
-        params: dict[str, Any] | None = None,
-        data: Any = None,
-        data_factory: Callable[[], Any] | None = None,
-        json_data: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        auth: bool = True,
-        retry_on_auth: bool = True,
-    ) -> aiohttp.ClientResponse:
-        """Execute a raw request against the API."""
-        request_headers = {"Accept": "application/json"}
-        if headers:
-            request_headers.update(headers)
-
-        if auth:
-            if self._access_token is None:
-                await self.async_login()
-            request_headers["Authorization"] = f"Bearer {self._access_token}"
-            request_headers.setdefault("X-Client-Type", "mobile")
-
-        try:
-            response = await self._session.request(
-                method.upper(),
-                f"{self._base_url}{path}",
-                params=params,
-                data=data_factory() if data_factory else data,
-                json=json_data,
-                headers=request_headers,
-                timeout=aiohttp.ClientTimeout(total=30),
-            )
-        except (aiohttp.ClientError, TimeoutError) as err:
-            raise EndurainApiError(f"Request failed: {err}") from err
-
-        if auth and retry_on_auth and response.status == 401:
-            response.release()
-            self._access_token = None
-            await self.async_login()
-            request_headers["Authorization"] = f"Bearer {self._access_token}"
-            try:
-                response = await self._session.request(
-                    method.upper(),
-                    f"{self._base_url}{path}",
-                    params=params,
-                    data=data_factory() if data_factory else data,
-                    json=json_data,
-                    headers=request_headers,
-                    timeout=aiohttp.ClientTimeout(total=30),
-                )
-            except (aiohttp.ClientError, TimeoutError) as err:
-                raise EndurainApiError(f"Request failed: {err}") from err
-
-        return response
-
-    async def _decode_response(self, response: aiohttp.ClientResponse) -> Any:
-        """Decode a response body."""
-        text = await response.text()
-        if not text:
-            return None
-        content_type = response.headers.get("Content-Type", "")
-        if "html" in content_type.lower() or "<!DOCTYPE html" in text or "<html" in text:
-            raise EndurainApiError("Unexpected HTML response from Endurain")
-        if "json" in content_type.lower():
-            try:
-                return json.loads(text)
-            except json.JSONDecodeError as err:
-                raise EndurainApiError("Invalid JSON response from Endurain") from err
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return text
-
-    def _extract_error_message(self, body: Any, default: str) -> str:
-        """Extract an error message from an API response."""
-        if isinstance(body, Mapping):
-            detail = body.get("detail") or body.get("error") or body.get("message")
-            if detail:
-                return str(detail)
-        if isinstance(body, str) and body:
-            return body
-        return default
-
-    def _extract_retry_after(self, body: Any) -> int | None:
-        """Extract retry_after from an API response."""
-        if isinstance(body, Mapping):
-            value = body.get("retry_after")
-            if isinstance(value, int):
-                return value
-        return None
+        return await self._checked_json(response, f"Request failed: {path}")
 
     def _latest_record(
         self,
@@ -605,3 +436,179 @@ class EndurainApiClient:
             if last_activity
             else None,
         }
+
+
+class EndurainAccountSession(_EndurainHttp):
+    """Signed-in session used only to create and revoke the integration's API key.
+
+    Endurain's /auth routes are first-party; the integration signs in only while
+    setting up or renewing its key, then uses the key for everything else.
+    """
+
+    def __init__(
+        self,
+        *,
+        session: aiohttp.ClientSession,
+        base_url: str,
+        device_id: str | None = None,
+    ) -> None:
+        """Initialize the session."""
+        super().__init__(session=session, base_url=base_url)
+        self._device_id = device_id
+        self._access_token: str | None = None
+        self._mfa_challenge: str | None = None
+        self._code_verifier: str | None = None
+
+    @property
+    def device_id(self) -> str | None:
+        """Return the device id Endurain assigned to this client."""
+        return self._device_id
+
+    async def async_login(self, username: str, password: str) -> None:
+        """Sign in with PKCE; raise EndurainMfaRequiredError when a code is needed."""
+        self._code_verifier = secrets.token_urlsafe(64)
+        code_challenge = (
+            base64.urlsafe_b64encode(hashlib.sha256(self._code_verifier.encode()).digest())
+            .rstrip(b"=")
+            .decode()
+        )
+        response = await self._raw_request(
+            "post",
+            "/api/v1/auth/login",
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                **self._auth_headers(),
+            },
+            data={
+                "username": username,
+                "password": password,
+                "code_challenge": code_challenge,
+                "code_challenge_method": "S256",
+            },
+        )
+        await self._async_follow(await self._checked_auth(response, "Login failed"))
+
+    async def async_verify_mfa(self, code: str) -> None:
+        """Answer the MFA step of the sign-in."""
+        if not self._mfa_challenge:
+            raise EndurainAuthError("No MFA step is pending")
+        response = await self._raw_request(
+            "post",
+            "/api/v1/auth/mfa/verify",
+            headers={"Content-Type": "application/json", **self._auth_headers()},
+            json_data={"mfa_challenge": self._mfa_challenge, "mfa_code": code},
+        )
+        await self._async_follow(await self._checked_auth(response, "MFA verification failed"))
+
+    async def async_fetch_profile(self) -> dict[str, Any]:
+        """Fetch the signed-in user's profile."""
+        response = await self._raw_request("get", "/api/v1/profile", headers=self._bearer())
+        body = await self._checked_json(response, "Could not read the profile")
+        if not isinstance(body, Mapping):
+            raise EndurainApiError("Unexpected profile payload")
+        return dict(body)
+
+    async def async_create_api_key(
+        self,
+        *,
+        name: str,
+        password: str,
+        mfa_code: str | None = None,
+    ) -> dict[str, Any]:
+        """Create an API key for the integration and return it with its metadata."""
+        step_up: dict[str, str] = {"current_password": password}
+        if mfa_code:
+            step_up["mfa_code"] = mfa_code
+        response = await self._raw_request(
+            "post",
+            "/api/v1/profile/api-keys",
+            headers={"Content-Type": "application/json", **self._bearer()},
+            json_data={"name": name, "scopes": list(API_KEY_SCOPES), "step_up": step_up},
+        )
+        body = await self._decode_response(response)
+        if response.status == 403 and not mfa_code:
+            # A step-up without the second factor of an MFA account.
+            raise EndurainMfaRequiredError(
+                self._extract_error_message(body, "A fresh MFA code is required")
+            )
+        if response.status in (401, 403):
+            raise EndurainAuthError(self._extract_error_message(body, "Step-up failed"))
+        if response.status == 409:
+            raise EndurainApiError(
+                self._extract_error_message(body, "The account holds too many API keys")
+            )
+        if response.status < 200 or response.status >= 300:
+            raise EndurainApiError(self._extract_error_message(body, "Could not create API key"))
+        if not isinstance(body, Mapping) or not body.get("key"):
+            raise EndurainApiError("API key response missing the key")
+        return dict(body)
+
+    async def async_revoke_api_key(self, key_id: str) -> None:
+        """Revoke an API key the integration created before."""
+        response = await self._raw_request(
+            "post", f"/api/v1/profile/api-keys/{key_id}/revoke", headers=self._bearer()
+        )
+        if response.status not in (204, 404):
+            await self._checked_json(response, "Could not revoke the previous API key")
+        response.release()
+
+    def _auth_headers(self) -> dict[str, str]:
+        """Return the headers every mobile /auth/ request carries."""
+        headers = {"X-Client-Type": "mobile"}
+        if self._device_id:
+            headers["X-Device-Id"] = self._device_id
+        return headers
+
+    def _bearer(self) -> dict[str, str]:
+        """Return the bearer header of the signed-in session."""
+        if not self._access_token:
+            raise EndurainAuthError("Not signed in")
+        return {"Authorization": f"Bearer {self._access_token}"}
+
+    async def _checked_auth(
+        self, response: aiohttp.ClientResponse, default_error: str
+    ) -> dict[str, Any]:
+        """Decode a sign-in step answer."""
+        body = await self._decode_response(response)
+        if response.status == 429:
+            raise EndurainRateLimitError(
+                self._extract_error_message(body, "Rate limit exceeded"),
+                retry_after=self._extract_retry_after(body, response),
+            )
+        if response.status >= 500:
+            raise EndurainApiError(
+                self._extract_error_message(
+                    body, f"{default_error}: server error {response.status}"
+                )
+            )
+        if response.status < 200 or response.status >= 300:
+            raise EndurainAuthError(self._extract_error_message(body, default_error))
+        if not isinstance(body, Mapping):
+            raise EndurainAuthError(f"{default_error}: response was not JSON")
+        return dict(body)
+
+    async def _async_follow(self, body: dict[str, Any]) -> None:
+        """Follow the sign-in steps until tokens or an MFA prompt."""
+        if isinstance(body.get("device_id"), str) and body["device_id"]:
+            self._device_id = body["device_id"]
+        step = body.get("next_step")
+        if step == "mfa":
+            self._mfa_challenge = str(body.get("mfa_challenge") or "")
+            raise EndurainMfaRequiredError("MFA is required")
+        if step == "password_change":
+            raise EndurainAuthError(
+                "Endurain requires a password change; sign in to Endurain and change it"
+            )
+        if step == "exchange":
+            response = await self._raw_request(
+                "post",
+                f"/api/v1/auth/sessions/{body.get('session_id')}/tokens",
+                headers={"Content-Type": "application/json", **self._auth_headers()},
+                json_data={"code_verifier": self._code_verifier},
+            )
+            await self._async_follow(await self._checked_auth(response, "Token exchange failed"))
+            return
+        if step != "tokens" or not body.get("access_token"):
+            raise EndurainAuthError(f"Unsupported Endurain sign-in step: {step}")
+        self._mfa_challenge = None
+        self._access_token = str(body["access_token"])

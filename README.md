@@ -29,13 +29,25 @@ The badge does not imply a public catalog listing.
 
 1. Go to **Settings → Devices & services → Add integration** and select **Endurain**.
 2. Enter your [Endurain](https://github.com/endurain-project/endurain) server URL
-   and account details.
+   and an API key (Endurain: **Settings → Security → API keys**). Or leave the
+   key empty and sign in once with your username and password: the integration
+   then creates a key named "Home Assistant" and does not store your password.
 3. Open the Endurain device to inspect distance, notifications, goals and gear.
 
-The integration requires Endurain v0.21 or later. It signs in as a mobile
-client with PKCE and remembers the device id Endurain returns, so repeated
-sign-ins do not trigger new-device notices. Strava import actions take
-`file_path` for the matching CSV from a Strava export.
+The integration requires Endurain v0.21 or later and authenticates with an API
+key. A key the integration creates holds the scopes `account`, `activities:read`,
+`activities:write`, `gears:read`, `gears:write`, `health:read` and
+`notifications:read`; a key you create needs the same for every sensor and
+action to work. Endurain API keys expire (365 days by default). Two weeks
+before the key the integration created expires, Home Assistant asks you to
+reauthenticate; signing in there creates a new key and revokes the old one.
+
+Entries set up with a username and password before this version switch to an
+API key on their own at the next start, unless the account uses MFA: those ask
+to reauthenticate.
+
+Strava import actions take `file_path` for the matching CSV from a Strava
+export.
 
 ## License
 
